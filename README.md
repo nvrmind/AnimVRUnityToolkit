@@ -22,7 +22,7 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 
 ## Things to watch out for
 - Currently we only support import on Windows platforms! We plan on supporting MacOS in the future and would love to hear from you if you urgently need MacOS support. Note that this *only* concerns importing stage files. You can still use the imported file on MacOS.
-- Stages with audio need to be imported twice the first time you import them. (Just right click the stage and press "Reimport").
+- Stages with audio need to be imported twice the first time you import them. The import editor will show a "Fixup audio clips" button if that's the case. Just press it and you're good to go!
 
 ### If you run into any problems, please open an issue in this repository!
 ____
