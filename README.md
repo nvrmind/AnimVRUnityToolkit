@@ -25,7 +25,7 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - Stages with audio need to be imported twice the first time you import them. (Just right click the stage and press "Reimport").
 
 ### If you run into any problems, please open an issue in this repository!
-
+____
 ## Documentation
 ### Import Settings
 #### Base Material
