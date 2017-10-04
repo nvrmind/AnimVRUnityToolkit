@@ -7,6 +7,10 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - Use the Unity Timeline API to playback animations, do scene transitions and integrate it with the rest of your game/movie.
 - Create new stages directly in the Unity Editor and open them in AnimVR. When you save, the changes are instantly visible in Unity.
 
+## Requirements
+- Unity 2017.1
+- AnimVR beta
+
 ## Getting Started
 
 - Download the Unity Package [here]()
