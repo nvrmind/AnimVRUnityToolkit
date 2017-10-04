@@ -36,9 +36,6 @@ Change this to set the Shader to use for all imported objects. The shader used s
  - \_Unlit:         _Float that indicates if the mesh should be affected by lighting._
  - \_Gamma:         _Gamma value, 1.0 when linear color space is selected in AnimVR, 2.2 otherwise._
  
- #### Apply Stage Transform
- When you move around in AnimVR you are transforming the stage. By default you probably don't want this movement to be applied to your imported stages, because that means that whenever you edit them you'll probably move them around a little. In cases where you really want them to be transformed exactly like they are in AnimVR, you can enable this option.
- 
  #### Import Audio
  Whether or not to import audio layers.
  
