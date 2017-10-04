@@ -25,3 +25,23 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - Stages with audio need to be imported twice the first time you import them. (Just right click the stage and press "Reimport").
 
 ### If you run into any problems, please open an issue in this repository!
+
+## Documentation
+### Import Settings
+#### Base Material
+Change this to set the Material to use for all imported objects. The material used should support vertex colors. Additionally, following properties are set by the importer: 
+ - \_Color:         _The base diffuse color._
+ - \_SpecColor:     _The base specular color._
+ - \_EmissionColor: _The base emission color._
+ - \_Unlit:         _Float that indicates if the mesh should be affected by lighting._
+ - \_Gamma:         _Gamma value, 1.0 when linear color space is selected in AnimVR, 2.2 otherwise._
+ 
+ #### Apply Stage Transform
+ When you move around in AnimVR you are transforming the stage. By default you probably don't want this movement to be applied to your imported stages, because that means that whenever you edit them you'll probably move them around a little. In cases where you really want them to be transformed exactly like they are in AnimVR, you can enable this option.
+ 
+ #### Import Audio
+ Whether or not to import audio layers.
+ 
+ #### Import Cameras
+ Wether or not to import camera layers.
+
