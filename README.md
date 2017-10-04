@@ -28,8 +28,8 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 ____
 ## Documentation
 ### Import Settings
-#### Base Material
-Change this to set the Material to use for all imported objects. The material used should support vertex colors. Additionally, following properties are set by the importer: 
+#### Base Shader
+Change this to set the Shader to use for all imported objects. The shader used should support vertex colors. Additionally, following properties are set by the importer: 
  - \_Color:         _The base diffuse color._
  - \_SpecColor:     _The base specular color._
  - \_EmissionColor: _The base emission color._
