@@ -29,6 +29,7 @@ ____
 ## Documentation
 ### Import Settings
 #### Base Shader
+
 Change this to set the Shader to use for all imported objects. The shader used should support vertex colors. Additionally, following properties are set by the importer: 
  - \_Color:         _The base diffuse color._
  - \_SpecColor:     _The base specular color._
@@ -37,8 +38,10 @@ Change this to set the Shader to use for all imported objects. The shader used s
  - \_Gamma:         _Gamma value, 1.0 when linear color space is selected in AnimVR, 2.2 otherwise._
  
  #### Import Audio
+ 
  Whether or not to import audio layers.
  
  #### Import Cameras
- Wether or not to import camera layers.
+ 
+ Whether or not to import camera layers.
 
