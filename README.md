@@ -25,6 +25,9 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - Stages with audio need to be imported twice the first time you import them. The import editor will show a "Fixup audio clips" button if that's the case. Just press it and you're good to go!
 
 ### If you run into any problems, please open an issue in this repository!
+
+Dario wrote a blog post on some of the technical considerations and implementation details on [his website](https://darioseyb.com/post/unity-importer/).
+
 ____
 ## Documentation
 ### Import Settings
