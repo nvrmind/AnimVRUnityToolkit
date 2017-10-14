@@ -42,9 +42,17 @@ Change this to set the Shader to use for all imported objects. The shader used s
  - \_Unlit:         _Float that indicates if the mesh should be affected by lighting._
  - \_Gamma:         _Gamma value, 1.0 when linear color space is selected in AnimVR, 2.2 otherwise._
  
- #### Import Audio
+ #### Default Wrap Mode
  
- Whether or not to import audio layers.
+ The wrap mode of the created `PlayableDirector`.
+ 
+ #### Audio Import Setting
+ 
+ Set how to handle audio layers.
+ 
+ - None: Don't import anything
+ - Only Clips: Import sound files and create Unity audio clips
+ - Clips and Tracks: Import files and also create timeline audio tracks (experimental)
  
  #### Import Cameras
  
