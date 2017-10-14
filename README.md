@@ -13,7 +13,7 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 
 ## Getting Started
 
-- Download the Unity Package [here]()
+- Download the Unity Package [here](https://github.com/nvrmind/AnimVRUnityToolkit/releases/download/1.0/AnimVRUnityToolkit_1.0.unitypackage)
 - Import it into your Unity project as described [here](https://docs.unity3d.com/Manual/AssetPackages.html)
 - Right click in your Unity project panel and choose "Create -> AnimVR -> Stage" (you can also drag an exisiting stage into your project window).
 - Double click the created asset. The first time you do this you'll need to set up the application to open .stage files with. In Windows 10 this done by clicking "More Apps", scrolling all the way down and clicking "Look for another app on this PC". Look for the folder your copy of AnimVR is installed to and choose "ANIMVR.exe".
