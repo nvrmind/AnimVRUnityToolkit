@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+﻿#if UNITY_EDITOR || ANIM_RUNTIME_AVAILABLE
 
 using System.Collections.Generic;
 using AnimVR;
@@ -29,6 +29,7 @@ public class AnimTimeline : AnimPlayable { }
 public class AnimCam : AnimPlayable { }
 public class AnimAudio : AnimPlayable { }
 public class AnimMesh : AnimPlayable { }
+public class AnimUnityImport : AnimPlayable { }
 
 public class AnimPuppet : AnimPlayable { }
 public class PuppetFrame : AnimPlayable { }
@@ -1231,19 +1232,9 @@ public class TimeLineData : PlayableData
     public override PlayableData DeepCopy()
     {
         var result = new TimeLineData();
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
+        PlayableData.CopyPlayableData(this, result);
+
         result.Frames = Frames.DeepCopy();
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
-        result.name = name;
-        result.opacity = opacity;
-        result.transform = transform.DeepCopy();
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
 
         return result;
     }
@@ -1401,20 +1392,11 @@ public class StaticMeshData : PlayableData
     public override PlayableData DeepCopy()
     {
         StaticMeshData result = new StaticMeshData();
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
-        result.Frames = Frames.DeepCopy();
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
+        PlayableData.CopyPlayableData(this, result);
+
         result.Materials = Materials.DeepCopy();
-        result.name = name;
-        result.opacity = opacity;
+        result.Frames = Frames.DeepCopy();
         result.Timeline = Timeline.DeepCopy();
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
 
         SerializedInstanceMappings.Clear();
         SerializedInstanceMappings.Capacity = InstanceMap.Count;
@@ -1429,7 +1411,6 @@ public class StaticMeshData : PlayableData
             result.InstanceMap.Add(result.Timeline.Frames[map]);
         }
 
-        result.transform = transform.DeepCopy();
         result.TransformProxies = TransformProxies.DeepCopy();
         return result;
     }
@@ -1467,18 +1448,9 @@ public class CameraData : PlayableData
     public override PlayableData DeepCopy()
     {
         CameraData result = new CameraData();
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
-        result.name = name;
-        result.opacity = opacity;
-        result.transform = transform.DeepCopy();
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
+        PlayableData.CopyPlayableData(this, result);
+
+        result.RecordingTime = RecordingTime;
 
         result.FilmFormat = FilmFormat;
         result.LensIndex = LensIndex;
@@ -1495,60 +1467,26 @@ public class CameraData : PlayableData
 }
 
 [Serializable]
-public class PuppetPointData : IAnimData, IDeepCopy<PuppetPointData>
+public class PuppetPointData : PlayableData
 {
     [OptionalField]
     public SerializableColor Color = new SerializableColor(1, 1, 1, 1);
     public TransformTimelineData Timeline;
 
-    [NonSerialized]
-    public PuppetPoint attachedPoint;
+    public PuppetPoint attachedPoint { get { return base.attachedPlayable as PuppetPoint; } }
 
-    public MonoBehaviour attachedObj
-    {
-        get
-        {
-            return attachedPoint;
-        }
-    }
-
-    public string name = "PuppetPoint" + Guid.NewGuid();
-    string IAnimData.name
-    {
-        get
-        {
-            return name;
-        }
-
-        set
-        {
-            name = value;
-        }
-    }
-
-    public SerializableTransform transform = new SerializableTransform();
-
-    public SerializableTransform Trans
-    {
-        get
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public void SetTransform(SerializableTransform transform)
-    {
-        this.transform = transform;
-        if (attachedPoint) transform.ApplyTo(attachedPoint.transform);
-    }
-
-    public PuppetPointData DeepCopy()
+    public override PlayableData DeepCopy()
     {
         PuppetPointData result = new PuppetPointData();
+        PlayableData.CopyPlayableData(this, result);
+
         result.Color = Color;
         result.name = name;
         result.Timeline = Timeline.DeepCopy();
         result.transform = transform.DeepCopy();
+        result.FadeIn = FadeIn;
+        result.FadeOut = FadeOut;
+
         return result;
     }
 }
@@ -1581,61 +1519,27 @@ public class TransformTimelineData : IDeepCopy<TransformTimelineData>
 }
 
 [Serializable]
-public class PuppetLinkData : IAnimData, IDeepCopy<PuppetLinkData>
+public class PuppetLinkData : PlayableData
 {
     [OptionalField]
     public SerializableColor Color = new SerializableColor(1, 1, 1, 1);
     public int StartIndex, EndIndex;
 
-    [NonSerialized]
-    public PuppetLink attachedLink;
+    public PuppetLink attachedLink { get { return attachedObj as PuppetLink; } }
 
-    public MonoBehaviour attachedObj
-    {
-        get
-        {
-            return attachedLink;
-        }
-    }
-
-    public string name = "PuppetLink" + Guid.NewGuid();
-    string IAnimData.name
-    {
-        get
-        {
-            return name;
-        }
-
-        set
-        {
-            name = value;
-        }
-    }
-
-    public SerializableTransform transform = new SerializableTransform();
-
-    public SerializableTransform Trans
-    {
-        get
-        {
-            throw new NotImplementedException();
-        }
-    }
-
-    public void SetTransform(SerializableTransform transform)
-    {
-        this.transform = transform;
-        if (attachedLink) transform.ApplyTo(attachedLink.transform);
-    }
-
-    public PuppetLinkData DeepCopy()
+    public override PlayableData DeepCopy()
     {
         var result = new PuppetLinkData();
+        PlayableData.CopyPlayableData(this, result);
+
         result.Color = Color;
         result.EndIndex = EndIndex;
         result.name = name;
         result.StartIndex = StartIndex;
         result.transform = transform.DeepCopy();
+        result.FadeIn = FadeIn;
+        result.FadeOut = FadeOut;
+
         return result;
     }
 }
@@ -1669,17 +1573,7 @@ public class PuppetData : PlayableData
     public override PlayableData DeepCopy()
     {
         var result = new PuppetData();
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
-        result.name = name;
-        result.opacity = opacity;
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
+        PlayableData.CopyPlayableData(this, result);
 
         result.transform = transform.DeepCopy();
         result.Frames = Frames.DeepCopy();
@@ -1719,19 +1613,7 @@ public class AudioData : PlayableData
     public override PlayableData DeepCopy()
     {
         var result = new AudioData();
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
-
-        result.name = name;
-        result.opacity = opacity;
-        result.transform = transform.DeepCopy();
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
+        PlayableData.CopyPlayableData(this, result);
 
         result.Spatialize = Spatialize;
         result.EncodedSamples = EncodedSamples.DeepCopy();
@@ -1745,6 +1627,22 @@ public class AudioData : PlayableData
 
         result.audioDataKey = audioDataKey.DeepCopy();
 
+        return result;
+    }
+}
+
+[Serializable]
+public class UnityImportData : PlayableData
+{
+    public AnimUnityImport attachedUnityImport { get { return base.attachedPlayable as AnimUnityImport; } }
+
+    public byte[] packageData;
+
+    public override PlayableData DeepCopy()
+    {
+        var result = new UnityImportData();
+        PlayableData.CopyPlayableData(this, result);
+        result.packageData = packageData.DeepCopy();
         return result;
     }
 }
@@ -1789,6 +1687,11 @@ public class
     public LoopType LoopIn = LoopType.Loop;
     [OptionalField]
     public LoopType LoopOut = LoopType.Loop;
+
+    [OptionalField]
+    public float FadeIn;
+    [OptionalField]
+    public float FadeOut;
 
     public SerializableTransform transform = new SerializableTransform();
 
@@ -1838,6 +1741,26 @@ public class
         }
     }
 
+
+    public static void CopyPlayableData(PlayableData source, PlayableData target)
+    {
+        target.displayName = source.displayName;
+        target.FrameIndex = source.FrameIndex;
+        target.IndexInSymbol = source.IndexInSymbol;
+        target.isVisible = source.isVisible;
+        target.LoopType = source.LoopType;
+        target.UseInOutLoop = source.UseInOutLoop;
+        target.LoopIn = source.LoopIn;
+        target.LoopOut = source.LoopOut;
+        target.FadeIn = source.FadeIn;
+        target.FadeOut = source.FadeOut;
+
+        target.name = source.name;
+        target.opacity = source.opacity;
+        target.transform = source.transform.DeepCopy();
+        target.AbsoluteTimeOffset = source.AbsoluteTimeOffset;
+    }
+
     public virtual PlayableData DeepCopy()
     {
         throw new NotImplementedException();
@@ -1875,6 +1798,8 @@ public class SymbolData : PlayableData
     [OptionalField(VersionAdded = 10)]
     public List<SymbolData> Symbols = new List<SymbolData>();
 
+    [OptionalField(VersionAdded = 11)]
+    public List<UnityImportData> UnityImports = new List<UnityImportData>();
 
     [NonSerialized]
     public List<PlayableData> Playables = new List<PlayableData>();
@@ -1889,8 +1814,9 @@ public class SymbolData : PlayableData
         if (Audios == null) Audios = new List<AudioData>();
         if (Cameras == null) Cameras = new List<CameraData>();
         if (Symbols == null) Symbols = new List<SymbolData>();
+        if (UnityImports == null) UnityImports = new List<UnityImportData>();
 
-        Playables.AddRange(Enumerable.Repeat<PlayableData>(null, TimeLines.Count + Meshes.Count + Puppets.Count + Audios.Count + Cameras.Count + Symbols.Count));
+        Playables.AddRange(Enumerable.Repeat<PlayableData>(null, TimeLines.Count + Meshes.Count + Puppets.Count + Audios.Count + Cameras.Count + Symbols.Count + UnityImports.Count));
 
         for (int i = 0; i < TimeLines.Count; i++)
         {
@@ -1922,6 +1848,11 @@ public class SymbolData : PlayableData
             Playables[Symbols[i].IndexInSymbol] = Symbols[i];
         }
 
+        for (int i = 0; i < UnityImports.Count; i++)
+        {
+            Playables[UnityImports[i].IndexInSymbol] = UnityImports[i];
+        }
+
         for (int i = 0; i < Playables.Count; i++)
         {
             if (Playables[i].displayName == null)
@@ -1940,6 +1871,7 @@ public class SymbolData : PlayableData
         Audios.Clear();
         Cameras.Clear();
         Symbols.Clear();
+        UnityImports.Clear();
 
         for (int i = 0; i < Playables.Count; i++)
         {
@@ -1951,6 +1883,7 @@ public class SymbolData : PlayableData
             else if (data is AudioData) Audios.Add(data as AudioData);
             else if (data is CameraData) Cameras.Add(data as CameraData);
             else if (data is SymbolData) Symbols.Add(data as SymbolData);
+            else if (data is UnityImportData) UnityImports.Add(data as UnityImportData);
         }
     }
 
@@ -1997,19 +1930,7 @@ public class SymbolData : PlayableData
     public override PlayableData DeepCopy()
     {
         SymbolData result = new SymbolData();
-
-        result.displayName = displayName;
-        result.FrameIndex = FrameIndex;
-        result.IndexInSymbol = IndexInSymbol;
-        result.isVisible = isVisible;
-        result.LoopType = LoopType;
-        result.UseInOutLoop = UseInOutLoop;
-        result.LoopIn = LoopIn;
-        result.LoopOut = LoopOut;
-        result.name = name;
-        result.opacity = opacity;
-        result.transform = transform.DeepCopy();
-        result.AbsoluteTimeOffset = AbsoluteTimeOffset;
+        PlayableData.CopyPlayableData(this, result);
 
         result.Playables = Playables.DeepCopy();
         result.SelectedPlayable = SelectedPlayable;
@@ -2142,7 +2063,7 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
 
         public static bool operator ==(AudioPoolKey x, AudioPoolKey y)
         {
-            return x.length == y.length && x.hash.SequenceEqual(y.hash);
+            return x.length == y.length && ((x.hash == null && y.hash == null) || x.hash.SequenceEqual(y.hash));
         }
 
         public static bool operator !=(AudioPoolKey x, AudioPoolKey y)
@@ -2152,7 +2073,7 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
 
         public bool Equals(AudioPoolKey other)
         {
-            return Equals(hash, other.hash) && length == other.length;
+            return this == other;
         }
 
         public override bool Equals(object obj)
@@ -2161,11 +2082,30 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
             return obj is AudioPoolKey && Equals((AudioPoolKey)obj);
         }
 
+        public int GetHashCode<T>(T[] array)
+        {
+            var elementComparer = EqualityComparer<T>.Default;
+
+            unchecked
+            {
+                if (array == null)
+                {
+                    return 0;
+                }
+                int hash = 17;
+                foreach (T element in array)
+                {
+                    hash = hash * 31 + elementComparer.GetHashCode(element);
+                }
+                return hash;
+            }
+        }
+
         public override int GetHashCode()
         {
             unchecked
             {
-                return ((hash != null ? hash.GetHashCode() : 0) * 397) ^ length;
+                return  (GetHashCode(hash) * 397) ^ length;
             }
         }
     }
@@ -2522,17 +2462,13 @@ public class AnimData : Singleton<AnimData>
 
     public static byte[] whiteTextureData;
 
-    static AnimData()
-    {
-    }
-
     public void Changed()
     {
         if (onChanged != null)
             onChanged();
     }
 
-    [SerializeField]
+    [NonSerialized]
     public List<StageData> Stages = new List<StageData>();
 
     public StageData CreateStageData()
@@ -2793,7 +2729,6 @@ public class AnimData : Singleton<AnimData>
                 }
             }
         }
-
         catch (Exception e)
         {
             Debug.Log("Error saving stage file: " + filepath + "\n" + e.Message);

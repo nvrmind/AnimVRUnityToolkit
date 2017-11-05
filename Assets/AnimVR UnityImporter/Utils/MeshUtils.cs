@@ -1,4 +1,4 @@
-﻿#if UNITY_EDITOR
+﻿#if UNITY_EDITOR || ANIM_RUNTIME_AVAILABLE
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;

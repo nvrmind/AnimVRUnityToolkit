@@ -1,4 +1,6 @@
-﻿// Upgrade NOTE: replaced 'UNITY_INSTANCE_ID' with 'UNITY_VERTEX_INPUT_INSTANCE_ID'
+﻿// Upgrade NOTE: upgraded instancing buffer 'InstanceProperties' to new syntax.
+
+// Upgrade NOTE: replaced 'UNITY_INSTANCE_ID' with 'UNITY_VERTEX_INPUT_INSTANCE_ID'
 
 Shader "AnimVR/Standard"
 {
@@ -72,9 +74,10 @@ Shader "AnimVR/Standard"
 
             sampler2D _MainTex;
 			
-			UNITY_INSTANCING_CBUFFER_START (InstanceProperties)
+			UNITY_INSTANCING_BUFFER_START (InstanceProperties)
             UNITY_DEFINE_INSTANCED_PROP (float4, _TintColor)
-            UNITY_INSTANCING_CBUFFER_END
+#define _TintColor_arr InstanceProperties
+            UNITY_INSTANCING_BUFFER_END(InstanceProperties)
 
 			fixed4 _Color;
 			fixed4 _EmissionColor;
@@ -92,9 +95,9 @@ Shader "AnimVR/Standard"
                 col.rgb *= lerp(lighting, 1, _Unlit);
 				col.rgb += _EmissionColor.rgb;
 
-				col *= UNITY_ACCESS_INSTANCED_PROP (_TintColor);
+				col *= UNITY_ACCESS_INSTANCED_PROP (_TintColor_arr, _TintColor);
 
-				col = lerp(col, UNITY_ACCESS_INSTANCED_PROP (_TintColor), _OnlyTint);
+				col = lerp(col, UNITY_ACCESS_INSTANCED_PROP (_TintColor_arr, _TintColor), _OnlyTint);
                 col = saturate(col);
                 
 				CoverageFragmentInfo f;

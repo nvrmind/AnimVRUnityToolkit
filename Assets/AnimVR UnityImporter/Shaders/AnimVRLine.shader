@@ -39,7 +39,7 @@
         float LineLength;
         int OneSided;
         int BrushType;
-        float EmissiveStrength;
+        float IsPulsing;
         
         float3 FacingDir;
         int TextureIndex;
@@ -135,7 +135,7 @@
 
         if(data.OneSided) o.color.a *=  max(0, dot(normalize(worldFacingDir), -worldSpaceViewDir));
 
-        float fadeFac = smoothstep(_FadeOutDistEnd*min(StageScale, 1), _FadeOutDistStart*min(StageScale, 1), viewDist);
+        float fadeFac = smoothstep(_FadeOutDistEnd*min(StageScale, 1), _FadeOutDistStart*min(StageScale, 1), viewDist*100);
 
         o.normal *= fadeFac ;
         o.bitangent *= fadeFac;
@@ -666,15 +666,12 @@
         }
 
         float4 c = texSample * float4(pow( vertColor.rgb, 2.2), vertColor.a) * _Color;
-        c.rgb *=  data.EmissiveStrength;
 
         if(data.BrushType == 2) c *= tex2D (_SplatTex, i.splatUv);
-
 
         if(data.UseTextureObjectSpace > 0.01) {
             float3 objNorm = normalize( i.objNorm );
 
-        
             half3 blend = abs(objNorm);
             // make sure the weights sum up to 1 (divide by sum of x+y+z)
             blend /= dot(blend,1.0);
@@ -694,7 +691,9 @@
         float highlightFactor = saturate((1-DoHighlighting) + data.Highlight);
         c.a = lerp(c.a * 0.55, c.a, highlightFactor);
 
-        c.rgb = desaturate(c.rgb, highlightFactor * 0.5 * DoHighlighting);
+		if (data.IsPulsing > 0.5) c.a *= 0.7 + sin(_Time.y*10) * 0.2;
+
+        c.rgb = desaturate(saturate(c.rgb), highlightFactor * 0.5 * DoHighlighting);
 
         CoverageFragmentInfo f;
         TRANSFER_COVERAGE_DATA_FRAG(i, f);

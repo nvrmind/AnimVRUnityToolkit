@@ -1,5 +1,5 @@
-﻿#if UNITY_EDITOR
-using System;
+﻿#if UNITY_EDITOR || ANIM_RUNTIME_AVAILABLE
+using System; 
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -16,7 +16,7 @@ public class TubeRenderer : MonoBehaviour
         public float LineLength;
         public int OneSided;
         public BrushType BrushType;
-        public float EmissiveStrength;
+        public float IsPulsing;
 
         public Vector3 FacingDir;
         public int TextureIndex;
@@ -116,7 +116,19 @@ public class TubeRenderer : MonoBehaviour
         }
     }
 
-    public float EmissiveStrength = 1.0f;
+    private bool _isPulsing;
+    public bool IsPulsing
+    {
+        get { return _isPulsing; }
+        set
+        {
+            _isPulsing = value;
+            if (bufferDataIndex == -1) return;
+            PerLineDataCPU[bufferDataIndex].IsPulsing = _isPulsing ? 1 : 0;
+            LineDataIsDirty = true;
+        }
+    }
+
     public bool OneSided = false;
     public bool Flat = false;
     public bool ConstantSize = true;
@@ -177,7 +189,7 @@ public class TubeRenderer : MonoBehaviour
         PerLineDataCPU[bufferDataIndex].BrushType = brushType;
         PerLineDataCPU[bufferDataIndex].TextureIndex = TextureIndex+1;
 
-        PerLineDataCPU[bufferDataIndex].EmissiveStrength         = EmissiveStrength;
+        PerLineDataCPU[bufferDataIndex].IsPulsing                = IsPulsing ? 1 : 0;
         PerLineDataCPU[bufferDataIndex].OneSided                 = OneSided ? 1 : 0;
         PerLineDataCPU[bufferDataIndex].TaperAmountShape         = taperShape ? 1 : 0;
         PerLineDataCPU[bufferDataIndex].TaperAmountOpacity       = taperOpacity ? 1 : 0;
