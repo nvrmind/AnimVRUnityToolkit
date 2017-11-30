@@ -1,5 +1,7 @@
 ﻿// Upgrade NOTE: upgraded instancing buffer 'InstanceProperties' to new syntax.
 
+// Upgrade NOTE: upgraded instancing buffer 'InstanceProperties' to new syntax.
+
 // Upgrade NOTE: replaced 'UNITY_INSTANCE_ID' with 'UNITY_VERTEX_INPUT_INSTANCE_ID'
 
 Shader "AnimVR/Standard"
@@ -66,7 +68,7 @@ Shader "AnimVR/Standard"
                 o.uv = v.texcoord.xy;
                 o.norm = UnityObjectToWorldNormal(v.normal);
                 o.diff =  v.color;
-				o.diff.rgb = pow(o.diff.rgb, _Gamma);
+
                 o.ambient = ShadeSH9(half4(o.norm,1));
 				o.objPos = v.vertex;
                 return o;
@@ -74,10 +76,17 @@ Shader "AnimVR/Standard"
 
             sampler2D _MainTex;
 			
+            //UNITY_SHADER_NO_UPGRADE
+#if UNITY_VERSION >= 201703
 			UNITY_INSTANCING_BUFFER_START (InstanceProperties)
-            UNITY_DEFINE_INSTANCED_PROP (float4, _TintColor)
+                UNITY_DEFINE_INSTANCED_PROP (float4, _TintColor)
 #define _TintColor_arr InstanceProperties
             UNITY_INSTANCING_BUFFER_END(InstanceProperties)
+#else
+            UNITY_INSTANCING_CBUFFER_START(InstanceProperties)
+                UNITY_DEFINE_INSTANCED_PROP(float4, _TintColor)
+            UNITY_INSTANCING_CBUFFER_END
+#endif
 
 			fixed4 _Color;
 			fixed4 _EmissionColor;
@@ -87,7 +96,10 @@ Shader "AnimVR/Standard"
             {
 				UNITY_SETUP_INSTANCE_ID (i);
 
-                fixed4 col = tex2D(_MainTex, i.uv) * _Color * i.diff;
+                fixed4 col = _Color * i.diff;
+                col.rgb = pow(col.rgb, _Gamma);
+                col *= tex2D(_MainTex, i.uv);
+
                 // compute shadow attenuation (1.0 = fully lit, 0.0 = fully shadowed)
                 // darken light's illumination with shadow, keep ambient intact
                 half nl = max(0, abs(dot(i.norm, _WorldSpaceLightPos0.xyz)));
@@ -95,9 +107,13 @@ Shader "AnimVR/Standard"
                 col.rgb *= lerp(lighting, 1, _Unlit);
 				col.rgb += _EmissionColor.rgb;
 
+#if UNITY_VERSION >= 201703
 				col *= UNITY_ACCESS_INSTANCED_PROP (_TintColor_arr, _TintColor);
-
-				col = lerp(col, UNITY_ACCESS_INSTANCED_PROP (_TintColor_arr, _TintColor), _OnlyTint);
+                col = lerp(col, UNITY_ACCESS_INSTANCED_PROP(_TintColor_arr, _TintColor), _OnlyTint);
+#else
+                col *= UNITY_ACCESS_INSTANCED_PROP(_TintColor);
+                col = lerp(col, UNITY_ACCESS_INSTANCED_PROP(_TintColor), _OnlyTint);
+#endif
                 col = saturate(col);
                 
 				CoverageFragmentInfo f;

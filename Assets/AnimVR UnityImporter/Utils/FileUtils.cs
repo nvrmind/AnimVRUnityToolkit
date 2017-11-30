@@ -156,6 +156,44 @@ public class FileUtils
 
     private static string numberPattern = "_{0}";
 
+    public static string NextAvailableDirectory(string path)
+    {
+        // Short-cut if already available
+        if (!Directory.Exists(path))
+            return path;
+
+        return GetNextDirectory(path + numberPattern);
+    }
+
+    private static string GetNextDirectory(string pattern)
+    {
+        string tmp = string.Format(pattern, 1);
+        if (tmp == pattern)
+            throw new ArgumentException("The pattern must include an index place-holder", "pattern");
+
+        if (!Directory.Exists(tmp))
+            return tmp; // short-circuit if no matches
+
+        int min = 1, max = 2; // min is inclusive, max is exclusive/untested
+
+        while (Directory.Exists(string.Format(pattern, max)))
+        {
+            min = max;
+            max *= 2;
+        }
+
+        while (max != min + 1)
+        {
+            int pivot = (max + min) / 2;
+            if (Directory.Exists(string.Format(pattern, pivot)))
+                min = pivot;
+            else
+                max = pivot;
+        }
+
+        return string.Format(pattern, max);
+    }
+
     public static string NextAvailableFilename(string path)
     {
         // Short-cut if already available

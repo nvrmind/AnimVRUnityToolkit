@@ -4,13 +4,12 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 
-public static class SendToAnimVRMenu
-{
+public static class SendToAnimVRMenu {
 
     [MenuItem("Assets/Send To AnimVR", false, -49)]
     static void SendToAnimVR()
     {
-        if (!Selection.activeGameObject)
+        if(!Selection.activeGameObject)
         {
             UnityEngine.Debug.Log("No GameObject selected.");
             return;

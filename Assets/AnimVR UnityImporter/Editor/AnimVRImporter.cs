@@ -96,6 +96,7 @@ namespace ANIMVR
 
             materialToUse = new Material(Shader.Find(Settings.Shader));
             materialToUse.SetFloat("_Unlit", Settings.UnlitByDefault ? 1 : 0);
+            materialToUse.SetFloat("_Gamma", PlayerSettings.colorSpace == ColorSpace.Gamma ? 1.0f : 2.2f);
             materialToUse.name = "BaseMaterial";
 
             needsAudioReimport = false;
@@ -554,6 +555,7 @@ namespace ANIMVR
                 var mr = partObj.AddComponent<MeshRenderer>();
 
                 partObj.transform.SetParent(transformAnchor.transform, false);
+                part.Transform.ApplyTo(partObj.transform);
 
                 mr.sharedMaterial = materials[part.MaterialIndex];
 
@@ -791,6 +793,7 @@ namespace ANIMVR
 
             materialToUse = new Material(Shader.Find(Settings.Shader));
             materialToUse.SetFloat("_Unlit", Settings.UnlitByDefault ? 1 : 0);
+            materialToUse.SetFloat("_Gamma", PlayerSettings.colorSpace == ColorSpace.Gamma ? 1.0f : 2.2f);
             materialToUse.name = "BaseMaterial";
 
             ctx.AddSubAsset("BaseMaterial", materialToUse);

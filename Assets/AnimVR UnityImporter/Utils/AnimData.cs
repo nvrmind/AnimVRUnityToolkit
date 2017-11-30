@@ -487,6 +487,13 @@ public class TransformFrame
         return interpolated;
     }
 
+    public void From(Transform transform)
+    {
+        Position = transform.localPosition;
+        Scale = transform.localScale;
+        Rotation = transform.localRotation;
+    }
+
     public void ApplyTo(Transform transform)
     {
         transform.localPosition = Position;
@@ -816,7 +823,7 @@ public interface IDeepCopy<T>
 public class SerializableTransform : IDeepCopy<SerializableTransform>
 {
     public SerializableVector3 pos = new SerializableVector3();
-    public SerializableQuaternion rot = new SerializableQuaternion();
+    public SerializableQuaternion rot = new SerializableQuaternion(Quaternion.identity);
     public SerializableVector3 scl = new SerializableVector3(1, 1, 1);
 
 
@@ -1245,6 +1252,9 @@ public class TimeLineData : PlayableData
 public class MeshData : IDeepCopy<MeshData>
 {
     [OptionalField]
+    public SerializableTransform Transform = new SerializableTransform();
+
+    [OptionalField]
     public int MaterialIndex = 0;
     public SerializableVector3[] vertices;
     public SerializableVector3[] normals;
@@ -1252,6 +1262,12 @@ public class MeshData : IDeepCopy<MeshData>
     [OptionalField]
     public SerializableColor[] colors;
     public int[] triangles;
+
+    [OnDeserializing]
+    void FormatDataDeserialize(StreamingContext sc)
+    {
+        Transform = new SerializableTransform();
+    }
 
     public MeshData DeepCopy()
     {
@@ -1262,6 +1278,7 @@ public class MeshData : IDeepCopy<MeshData>
         result.triangles = triangles.DeepCopy();
         result.uvs = uvs.DeepCopy();
         result.vertices = vertices.DeepCopy();
+        result.Transform = Transform.DeepCopy();
         return result;
     }
 }
@@ -1647,6 +1664,33 @@ public class UnityImportData : PlayableData
     }
 }
 
+public enum PlayableLicenseType
+{
+    AllRightsReserved,
+    Attribution,
+    ShareAlike,
+    NonCommercial
+}
+
+[Serializable]
+public class PlayableAttributionInfo : IDeepCopy<PlayableAttributionInfo>
+{
+    public string Author;
+    public string AttributionText;
+    public PlayableLicenseType LicenseType;
+
+    public PlayableAttributionInfo DeepCopy()
+    {
+        var result = new PlayableAttributionInfo()
+        {
+            Author = Author,
+            AttributionText = AttributionText,
+            LicenseType = LicenseType
+        };
+        return result;
+    }
+}
+
 [System.Serializable]
 public class
     PlayableData : IAnimData, IDeepCopy<PlayableData>
@@ -1692,6 +1736,9 @@ public class
     public float FadeIn;
     [OptionalField]
     public float FadeOut;
+
+    [OptionalField]
+    public PlayableAttributionInfo AttributionInfo;
 
     public SerializableTransform transform = new SerializableTransform();
 
@@ -1759,6 +1806,7 @@ public class
         target.opacity = source.opacity;
         target.transform = source.transform.DeepCopy();
         target.AbsoluteTimeOffset = source.AbsoluteTimeOffset;
+        target.AttributionInfo = source.AttributionInfo != null ? source.AttributionInfo.DeepCopy() : null;
     }
 
     public virtual PlayableData DeepCopy()
@@ -2105,7 +2153,7 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
         {
             unchecked
             {
-                return  (GetHashCode(hash) * 397) ^ length;
+                return (GetHashCode(hash) * 397) ^ length;
             }
         }
     }
@@ -2318,6 +2366,25 @@ public class StageData : IAnimData, IDeepCopy<StageData>
     {
         this.transform = transform.DeepCopy();
         if (attachedStage) transform.ApplyTo(attachedStage.transform);
+    }
+
+    public List<PlayableAttributionInfo> CollectAttributionInfo()
+    {
+        List<PlayableAttributionInfo> result = new List<PlayableAttributionInfo>();
+
+        foreach (var symbol in Symbols)
+        {
+            foreach (var playable in symbol.EnumeratePlayables())
+            {
+                if (playable.AttributionInfo != null &&
+                    result.FindIndex((a) => a.AttributionText == playable.AttributionInfo.AttributionText) == -1)
+                {
+                    result.Add(playable.AttributionInfo);
+                }
+            }
+        }
+
+        return result;
     }
 
     [OnSerializing]

@@ -157,11 +157,11 @@
         float4 planeTest;
 
         // left
-        planeTest.x = (( UnityDistanceFromPlane(wpos0, unity_CameraWorldClipPlanes[0]) > -cullEps) ? 1.0f : 0.0f ) +
-                      (( UnityDistanceFromPlane(wpos1, unity_CameraWorldClipPlanes[0]) > -cullEps) ? 1.0f : 0.0f );
+        planeTest.x = (( UnityDistanceFromPlane(wpos0, unity_CameraWorldClipPlanes[0]) > -cullEps-0.2) ? 1.0f : 0.0f ) +
+                      (( UnityDistanceFromPlane(wpos1, unity_CameraWorldClipPlanes[0]) > -cullEps-0.2) ? 1.0f : 0.0f );
         // right
-        planeTest.y = (( UnityDistanceFromPlane(wpos0, unity_CameraWorldClipPlanes[1]) > -cullEps-0.3) ? 1.0f : 0.0f ) +
-                      (( UnityDistanceFromPlane(wpos1, unity_CameraWorldClipPlanes[1]) > -cullEps-0.3) ? 1.0f : 0.0f );
+        planeTest.y = (( UnityDistanceFromPlane(wpos0, unity_CameraWorldClipPlanes[1]) > -cullEps-0.75) ? 1.0f : 0.0f ) +
+                      (( UnityDistanceFromPlane(wpos1, unity_CameraWorldClipPlanes[1]) > -cullEps-0.75) ? 1.0f : 0.0f );
         // top
         planeTest.z = (( UnityDistanceFromPlane(wpos0, unity_CameraWorldClipPlanes[2]) > -cullEps) ? 1.0f : 0.0f ) +
                       (( UnityDistanceFromPlane(wpos1, unity_CameraWorldClipPlanes[2]) > -cullEps) ? 1.0f : 0.0f );
@@ -210,9 +210,10 @@
 
         PerLineDataS data = PerLineData[patch[0].dataIndex];
 
-        float averageThickness =  (length(mul(unity_ObjectToWorld, float4(patch[0].bitangent.xyz, 0))) + length(mul(unity_ObjectToWorld,float4(patch[1].bitangent.xyz, 0)))) * 0.5 ; 
+        float averageThickness =  max(length(mul(unity_ObjectToWorld, float4(patch[0].bitangent.xyz, 0))), 
+                                      length(mul(unity_ObjectToWorld, float4(patch[1].bitangent.xyz, 0)))); 
         output.edges[0] = data.LineCount; // Detail factor
-        output.edges[1] = data.BrushType == 2 ? 8 : UnityEdgeLengthBasedTessCullLine(patch[0].vertex, patch[1].vertex, _TessAmount * 0.2, averageThickness); // Density factor
+        output.edges[1] = data.BrushType == 2 ? 8 : UnityEdgeLengthBasedTessCullLine(patch[0].vertex, patch[1].vertex, _TessAmount * 0.2, averageThickness * 2); // Density factor
 
         return output;
     }
