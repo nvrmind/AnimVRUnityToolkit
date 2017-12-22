@@ -91,6 +91,7 @@ public static class AudioDataUtils
 
         return result;
 
+        /*
         using (MemoryStream inStream = new MemoryStream(memory))
         using (var vorbis = new NVorbis.VorbisReader(inStream, true))
         {
@@ -127,7 +128,7 @@ public static class AudioDataUtils
             clip.LoadAudioData();
 
             return clip;
-        }
+        }*/
     }
 
     private static AudioClip DecodeClipFromMp3(byte[] encodedSamples, int channels, int frequency)
@@ -603,6 +604,16 @@ public struct SerializableVector3
         return this == (SerializableVector3)obj;
     }
 
+    public override int GetHashCode()
+    {
+        var hashCode = 373119288;
+        hashCode = hashCode * -1521134295 + base.GetHashCode();
+        hashCode = hashCode * -1521134295 + x.GetHashCode();
+        hashCode = hashCode * -1521134295 + y.GetHashCode();
+        hashCode = hashCode * -1521134295 + z.GetHashCode();
+        return hashCode;
+    }
+
     public static bool operator ==(SerializableVector3 x, SerializableVector3 y)
     {
         if (ReferenceEquals(x, y)) return true;
@@ -661,6 +672,15 @@ public struct SerializableVector2
         return this == (SerializableVector2)obj;
     }
 
+    public override int GetHashCode()
+    {
+        var hashCode = 1502939027;
+        hashCode = hashCode * -1521134295 + base.GetHashCode();
+        hashCode = hashCode * -1521134295 + x.GetHashCode();
+        hashCode = hashCode * -1521134295 + y.GetHashCode();
+        return hashCode;
+    }
+
     public static bool operator ==(SerializableVector2 x, SerializableVector2 y)
     {
         if (ReferenceEquals(x, y)) return true;
@@ -717,6 +737,17 @@ public struct SerializableQuaternion
     {
         if (!(obj is SerializableQuaternion)) return false;
         return this == (SerializableQuaternion)obj;
+    }
+
+    public override int GetHashCode()
+    {
+        var hashCode = -1743314642;
+        hashCode = hashCode * -1521134295 + base.GetHashCode();
+        hashCode = hashCode * -1521134295 + x.GetHashCode();
+        hashCode = hashCode * -1521134295 + y.GetHashCode();
+        hashCode = hashCode * -1521134295 + z.GetHashCode();
+        hashCode = hashCode * -1521134295 + w.GetHashCode();
+        return hashCode;
     }
 
     public static bool operator ==(SerializableQuaternion x, SerializableQuaternion y)
@@ -797,6 +828,18 @@ public struct SerializableColor
     {
         if (!(obj is SerializableColor)) return false;
         return this == (SerializableColor)obj;
+    }
+
+    public override int GetHashCode()
+    {
+        var hashCode = -355389506;
+        hashCode = hashCode * -1521134295 + base.GetHashCode();
+        hashCode = hashCode * -1521134295 + r.GetHashCode();
+        hashCode = hashCode * -1521134295 + g.GetHashCode();
+        hashCode = hashCode * -1521134295 + b.GetHashCode();
+        hashCode = hashCode * -1521134295 + a.GetHashCode();
+        hashCode = hashCode * -1521134295 + EqualityComparer<Color>.Default.GetHashCode(C);
+        return hashCode;
     }
 
     public static bool operator ==(SerializableColor x, SerializableColor y)
@@ -919,6 +962,15 @@ public class SerializableTransform : IDeepCopy<SerializableTransform>
         return new SerializableTransform(this);
     }
 
+    public override int GetHashCode()
+    {
+        var hashCode = 1619851620;
+        hashCode = hashCode * -1521134295 + EqualityComparer<SerializableVector3>.Default.GetHashCode(pos);
+        hashCode = hashCode * -1521134295 + EqualityComparer<SerializableQuaternion>.Default.GetHashCode(rot);
+        hashCode = hashCode * -1521134295 + EqualityComparer<SerializableVector3>.Default.GetHashCode(scl);
+        return hashCode;
+    }
+
     public static bool operator ==(SerializableTransform x, SerializableTransform y)
     {
         if (ReferenceEquals(x, y)) return true;
@@ -988,7 +1040,11 @@ public struct BrushStyle
 }
 
 [System.Serializable]
+#pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
+#pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 public class LineData : IAnimData, IDeepCopy<LineData>
+#pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
+#pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     [OptionalField]
     [NonSerialized]
@@ -1134,7 +1190,11 @@ public class LineData : IAnimData, IDeepCopy<LineData>
 }
 
 [System.Serializable]
+#pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
+#pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 public class FrameData : IAnimData, IDeepCopy<FrameData>
+#pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
+#pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     public string name = "Frame" + Guid.NewGuid();
     string IAnimData.name
@@ -1203,7 +1263,11 @@ public class FrameData : IAnimData, IDeepCopy<FrameData>
 }
 
 [System.Serializable]
+#pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
+#pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 public class TimeLineData : PlayableData
+#pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
+#pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     public List<FrameData> Frames = new List<FrameData>();
 
@@ -1816,7 +1880,11 @@ public class
 }
 
 [System.Serializable]
+#pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
+#pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 public class SymbolData : PlayableData
+#pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
+#pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     [OptionalField]
     [Obsolete("previewFrames is obsolete, symbols don't need them.", true)]
@@ -2008,7 +2076,7 @@ public class SymbolData : PlayableData
 
     public bool PathOf(PlayableData playable, ref string path)
     {
-        if (playable == this)
+        if ( ReferenceEquals(playable,this))
         {
             path = path + playable.displayName + "/";
             return true;
@@ -2153,7 +2221,7 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
         {
             unchecked
             {
-                return (GetHashCode(hash) * 397) ^ length;
+                return  (GetHashCode(hash) * 397) ^ length;
             }
         }
     }
@@ -2291,7 +2359,11 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
 }
 
 [System.Serializable]
+#pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
+#pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 public class StageData : IAnimData, IDeepCopy<StageData>
+#pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
+#pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     [OptionalField(VersionAdded = 2)]
     public int SaveDataVersion = 2;
@@ -2372,11 +2444,11 @@ public class StageData : IAnimData, IDeepCopy<StageData>
     {
         List<PlayableAttributionInfo> result = new List<PlayableAttributionInfo>();
 
-        foreach (var symbol in Symbols)
+        foreach(var symbol in Symbols)
         {
-            foreach (var playable in symbol.EnumeratePlayables())
+            foreach(var playable in symbol.EnumeratePlayables())
             {
-                if (playable.AttributionInfo != null &&
+                if (playable.AttributionInfo != null && 
                     result.FindIndex((a) => a.AttributionText == playable.AttributionInfo.AttributionText) == -1)
                 {
                     result.Add(playable.AttributionInfo);
@@ -2713,8 +2785,6 @@ public class AnimData : Singleton<AnimData>
                 stream.Seek(0, SeekOrigin.Begin);
                 BinaryFormatter bf = new BinaryFormatter();
                 stage = (StageData)bf.Deserialize(stream);
-                var timeTotal = stopwatch.ElapsedMilliseconds;
-                var timeDeserialize = timeTotal - timeExtract;
                 stopwatch.Stop();
             }
         }

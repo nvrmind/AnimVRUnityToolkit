@@ -1,49 +1,45 @@
-﻿// Upgrade NOTE: upgraded instancing buffer 'InstanceProperties' to new syntax.
-
-// Upgrade NOTE: upgraded instancing buffer 'InstanceProperties' to new syntax.
-
-// Upgrade NOTE: replaced 'UNITY_INSTANCE_ID' with 'UNITY_VERTEX_INPUT_INSTANCE_ID'
-
-Shader "AnimVR/Standard"
+﻿Shader "AnimVR/Standard"
 {
     Properties
     {
         _MainTex ("Diffuse Texture", 2D) = "white" {}
-        _Color ("Diffuse Color", Color)  = (1, 1, 1, 1)
-        _TintColor ("Tint", Color)  = (1, 1, 1, 1)
-        _OnlyTint ("OnlyTint", Float)  = 0
-        _EmissionColor ("Emissive Color", Color) = (0, 0, 0, 1)
-        _SpecColor ("Specular Color", Color) = (0, 0, 0, 1)
-		_Unlit ("Is Unlit", Range(0, 1)) = 0
-		_Gamma ("Gamma Value", Float) = 1
+		_Color("Diffuse Color", Color) = (1, 1, 1, 1)
+		_TintColor("Tint", Color) = (1, 1, 1, 1)
+		_OnlyTint("OnlyTint", Float) = 0
+		_EmissionColor("Emissive Color", Color) = (0, 0, 0, 1)
+		_SpecColor("Specular Color", Color) = (0, 0, 0, 1)
+		_Unlit("Is Unlit", Range(0, 1)) = 0
+		_Gamma("Gamma Value", Float) = 1
 
-		[HideInInspector] _ZWrite ("__zw", Float) = 1.0
-    }
-    SubShader
-    {
-		
+		[HideInInspector] _ZWrite("__zw", Float) = 1.0
+	}
+		SubShader
+		{
 
-        Pass
-        {
-            Tags {"LightMode"="ForwardBase"  "Queue"="Geometry-3" "RenderType"="Opaque"  }
-			Blend Off 
-			Cull Off
-			ZWrite [_ZWrite]
 
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
-			#pragma target 5.0
-			#pragma multi_compile_instancing
-            #include "UnityCG.cginc"
-            #include "Lighting.cginc"
+			Pass
+			{
+				Tags {"LightMode" = "ForwardBase"  "Queue" = "Geometry-3" "RenderType" = "Opaque"  }
+				Blend Off
+				Cull Off
+				ZWrite[_ZWrite]
 
-            // compile shader into multiple variants, with and without shadows
-            // (we don't care about any lightmaps yet, so skip these variants)
-            #pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
-            // shadow helper functions and macros
-            #include "AutoLight.cginc"
+				CGPROGRAM
+				#pragma vertex vert
+				#pragma fragment frag
+				#pragma target 5.0
+				#pragma multi_compile_instancing
+				#include "UnityCG.cginc"
+				#include "Lighting.cginc"
+
+			// compile shader into multiple variants, with and without shadows
+			// (we don't care about any lightmaps yet, so skip these variants)
+			#pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
+			// shadow helper functions and macros
+			#include "AutoLight.cginc"
 			#include "CoverageTransparency.cginc"
+
+			StructuredBuffer<int> ConstraintFlags;
 			
 			float _Gamma;
 			float _OnlyTint;
@@ -59,7 +55,7 @@ Shader "AnimVR/Standard"
 				UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
-            v2f vert (appdata_full v)
+            v2f vert (appdata_full v, uint id : SV_VertexID)
             {
                 v2f o;
 				UNITY_SETUP_INSTANCE_ID (v);
@@ -69,6 +65,8 @@ Shader "AnimVR/Standard"
                 o.norm = UnityObjectToWorldNormal(v.normal);
                 o.diff =  v.color;
 
+				if (ConstraintFlags[id] != 0) o.diff = float4(1, 0, 0, 1);
+
                 o.ambient = ShadeSH9(half4(o.norm,1));
 				o.objPos = v.vertex;
                 return o;
@@ -77,7 +75,7 @@ Shader "AnimVR/Standard"
             sampler2D _MainTex;
 			
             //UNITY_SHADER_NO_UPGRADE
-#if UNITY_VERSION >= 201703
+#if UNITY_VERSION >= 201730
 			UNITY_INSTANCING_BUFFER_START (InstanceProperties)
                 UNITY_DEFINE_INSTANCED_PROP (float4, _TintColor)
 #define _TintColor_arr InstanceProperties
@@ -107,7 +105,7 @@ Shader "AnimVR/Standard"
                 col.rgb *= lerp(lighting, 1, _Unlit);
 				col.rgb += _EmissionColor.rgb;
 
-#if UNITY_VERSION >= 201703
+#if UNITY_VERSION >= 201730
 				col *= UNITY_ACCESS_INSTANCED_PROP (_TintColor_arr, _TintColor);
                 col = lerp(col, UNITY_ACCESS_INSTANCED_PROP(_TintColor_arr, _TintColor), _OnlyTint);
 #else

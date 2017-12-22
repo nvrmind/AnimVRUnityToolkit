@@ -92,24 +92,29 @@ namespace ANIMVR
             PreviewTexture.LoadImage(stage.previewFrames[0], false);
             PreviewTexture.Apply();
 
-            if (Settings.Shader == null) Settings.Shader = "AnimVR/Standard";
+            if (Settings.Shader == null)
+            {
+                Debug.Log("Resetting shader");
+                Settings.Shader = "AnimVR/Standard";
+            }
 
             materialToUse = new Material(Shader.Find(Settings.Shader));
             materialToUse.SetFloat("_Unlit", Settings.UnlitByDefault ? 1 : 0);
             materialToUse.SetFloat("_Gamma", PlayerSettings.colorSpace == ColorSpace.Gamma ? 1.0f : 2.2f);
-            materialToUse.name = "BaseMaterial";
+            materialToUse.name = Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial";
 
             needsAudioReimport = false;
 
-            var stageObj = GenerateUnityObject(stage, ctx);
+            GenerateUnityObject(stage, ctx);
 
-            ctx.AddObjectToAsset("BaseMaterial", materialToUse);
+            ctx.AddObjectToAsset(Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial", materialToUse);
 
             InfoString = "FPS: " + stage.fps + ", " + stage.timelineLength + " frames \n" 
                          + totalVertices + " verts, " + totalLines + " lines";
 
             savedClips = null;
             stage = null;
+
         }
 
         public GameObject GenerateUnityObject(StageData stage, AssetImportContext ctx)
@@ -151,8 +156,6 @@ namespace ANIMVR
             }
             //hacky fix cause fixed duration from code is broken
             timelineAsset.fixedDuration = (stage.timelineLength -1) * 1.0 / stage.fps;
-
-            
             
             return stageObj;
         }
@@ -276,7 +279,7 @@ namespace ANIMVR
             animAsset.FPS = stage.fps;
 
             director.SetGenericBinding(animAsset, playableObj);
-            ctx.AddObjectToAsset(pathForName + "_activeAsset", animAsset);
+            ctx.AddObjectToAsset(pathForName + "_animAsset", animAsset);
 
             // ACTIVATION
             var frameTrack = parentTimeline.CreateTrack<ActivationTrack>(groupTrack, pathForName + "_track");
@@ -458,6 +461,7 @@ namespace ANIMVR
             }
 
             var animationClip = new AnimationClip();
+#pragma warning disable CS0618 // Type or member is obsolete
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localPosition.x", xCurve);
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localPosition.y", yCurve);
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localPosition.z", zCurve);
@@ -471,6 +475,7 @@ namespace ANIMVR
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localScale.x", scaleXCurve);
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localScale.y", scaleYCurve);
             AnimationUtility.SetEditorCurve(animationClip, path, typeof(Transform), "localScale.z", scaleZCurve);
+#pragma warning restore CS0618 // Type or member is obsolete
 
             animationClip.frameRate = stage.fps;
 

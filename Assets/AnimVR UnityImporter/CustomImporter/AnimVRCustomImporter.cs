@@ -14,5 +14,11 @@ namespace AnimVRFilePlugin
     public class CustomImporterAttribute : Attribute
     {
         public string Extension;
+        public List<string> Extensions;
+
+        public CustomImporterAttribute(params string[] exts)
+        {
+            Extensions = new List<string>(exts);
+        }
     }
 }

@@ -177,13 +177,12 @@ public static class MeshUtils
     static float _TaperDistEnd = 0.1f;
     static float _EndTaperFactor = 1;
 
-    static Color _LineColor;
     static int _BrushType;
     static float _LineCount;
     static float _LineLength;
     static float _TaperAmountShape;
     static float _TaperAmountOpacity;
-    static float _ConstantSize;
+    //static float _ConstantSize;
 
     public static void GeneratePositionData(LineData data, List<Vector3> positions, List<int> indices, List<Vector4> colors)
     {
@@ -214,8 +213,7 @@ public static class MeshUtils
         _TaperAmountShape = data.taperShape ? 1 : 0;
         _TaperAmountOpacity = data.taperOpacity ? 1 : 0;
         _LineCount = data.multiLine ? 12f : 1.0f;
-        _ConstantSize = data.constantWidth ? 1 : 0;
-        _LineColor = Color.white;
+        //_ConstantSize = data.constantWidth ? 1 : 0;
 
         List<g2f> tristream = new List<g2f>();
 

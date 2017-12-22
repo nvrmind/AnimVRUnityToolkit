@@ -170,8 +170,6 @@ public class TubeRenderer : MonoBehaviour
     }
 
 
-    private int endTaperFactorId;
-
     new public MeshRenderer renderer;
     private MeshFilter meshFilter;
 
@@ -370,7 +368,6 @@ public class TubeRenderer : MonoBehaviour
         lastAddVert.point = Vector3.Lerp(startPoint, endPoint, 1.0f / (0.5f * additionalVertices));
 
         int firstIndex = additionalVertices / 2;
-        int lastIndex = actualVertexCount - additionalVertices / 2 - 1;
         for (int i = 1; i < vertices.Count - 1; i++)
         {
             addPointFunc(firstIndex + i, vertices[i], i == 1 ? firstAddVert : vertices[i - 1], i == vertices.Count - 2 ? lastAddVert : vertices[i + 1]);

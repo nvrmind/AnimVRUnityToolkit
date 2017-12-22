@@ -20,7 +20,6 @@ namespace AnimVR.Timeline
         ///   <para>The PlayableDirector to control.</para>
         /// </summary>
         public PlayableDirector director;
-        private double m_Time;
 
         public static ScriptPlayable<AnimDirectorControlPlayable> Create(PlayableGraph graph, PlayableDirector director)
         {
@@ -52,7 +51,6 @@ namespace AnimVR.Timeline
                 }
             }
 
-            this.m_Time = playable.GetTime<Playable>();
             this.UpdateTime(playable);
         }
 

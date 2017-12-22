@@ -38,6 +38,7 @@ namespace ANIMVR
 
         Shader shader;
 
+
         public override void OnInspectorGUI()
         {
             var importer = serializedObject.targetObject as AnimVRImporter;
@@ -46,7 +47,11 @@ namespace ANIMVR
 
             var shaderProp = serSettings.FindPropertyRelative(() => settings.Shader);
 
-            if (!shader) shader = Shader.Find(shaderProp.stringValue);
+            if (!shader)
+            {
+                Debug.Log("Reloading shader: " + shaderProp.stringValue);
+                shader = Shader.Find(shaderProp.stringValue);
+            }
 
             shader = EditorGUILayout.ObjectField(new GUIContent("Base Shader", "The shader to use for all materials."), shader, typeof(Shader), false) as Shader;
 

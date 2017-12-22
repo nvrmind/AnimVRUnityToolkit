@@ -21,15 +21,17 @@ public static class SendToAnimVRMenu {
         PlayerSettings.virtualRealitySupported = true;
 
         var filename = Path.GetTempFileName();
+#pragma warning disable CS0618 // Type or member is obsolete
         if (!BuildPipeline.BuildAssetBundle(Selection.activeGameObject,
             new Object[] { Selection.activeGameObject },
             filename, BuildAssetBundleOptions.ChunkBasedCompression | BuildAssetBundleOptions.CollectDependencies | BuildAssetBundleOptions.CompleteAssets, BuildTarget.StandaloneWindows64))
+#pragma warning restore CS0618 // Type or member is obsolete
         {
             UnityEngine.Debug.Log("AssetBundle build failed.");
             return;
         }
 
-        if (false)
+        /*if (false)
         {
             var assetBytes = File.ReadAllBytes(filename);
 
@@ -49,7 +51,7 @@ public static class SendToAnimVRMenu {
                 Debug.LogError(www.error);
             }
         }
-        else
+        else*/
         {
             WWW www = new WWW("http://localhost:62346/?path=" + WWW.EscapeURL(filename));
 
