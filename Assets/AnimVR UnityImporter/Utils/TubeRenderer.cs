@@ -289,7 +289,8 @@ public class TubeRenderer : MonoBehaviour
             var prevPoint = prev.point;
             var nextPoint = next.point;
 
-            currentTotalLength += Vector3.Distance(prevPoint, v.point);
+            float dist = Vector3.Distance(prevPoint, v.point);
+            currentTotalLength += dist;
 
             if (float.IsNaN(v.point.x) || float.IsNaN(v.point.z) || float.IsNaN(v.point.z))
                 return;
@@ -320,82 +321,129 @@ public class TubeRenderer : MonoBehaviour
             }
         };
 
-        TubeVertex firstAddVert = vertices[0];
-        var startPoint = vertices[0].point;
-        firstAddVert.point -= firstAddVert.orientation * Vector3.forward * firstAddVert.extends.x * 0.5f;
-        var endPoint = firstAddVert.point;
-
-        Vector2 smallExtends = brushType == BrushType.Sphere ? firstAddVert.extends * 0.001f : firstAddVert.extends;
-        var prevExtends = firstAddVert.extends;
-
+        if (brushType == BrushType.Sphere)
         {
-            firstAddVert.extends = firstAddVert.extends * 0.001f;
-            addPointFunc(0, firstAddVert, firstAddVert, firstAddVert);
+            TubeVertex firstAddVert = vertices[0];
+            var startPoint = vertices[0].point;
+            firstAddVert.point -= firstAddVert.orientation * Vector3.forward * firstAddVert.extends.x * 0.5f;
+            var endPoint = firstAddVert.point;
 
-            var lastVert = firstAddVert;
-            firstAddVert.extends = Vector2.Lerp(smallExtends, prevExtends, (0.0f / (0.5f * additionalVertices)));
-            firstAddVert.point = Vector3.Lerp(endPoint, startPoint, ( 0.0f/ (0.5f * additionalVertices)));
-            var thisVert = firstAddVert;
+            Vector2 smallExtends = brushType == BrushType.Sphere ? firstAddVert.extends * 0.001f : firstAddVert.extends;
+            var prevExtends = firstAddVert.extends;
 
-            firstAddVert.extends = Vector2.Lerp(smallExtends, prevExtends, (1.0f) / (0.5f * additionalVertices));
-            firstAddVert.point = Vector3.Lerp(endPoint, startPoint, (1.0f) / (0.5f * additionalVertices));
+            Func<float, float> t = (float v) => v;
+            Func<float, float> height = (float v) => Mathf.Sqrt(1.0f - (1.0f - v) * (1.0f - v));
 
-            var nextVert = firstAddVert;
-
-            for (int i = 1; i <= additionalVertices / 2; i++)
             {
-                addPointFunc(i, thisVert, lastVert, nextVert);
-                lastVert = thisVert;
-                thisVert = nextVert;
+                firstAddVert.extends = firstAddVert.extends * 0.001f;
 
-                float interp = ((float)i + 1) / (0.5f * additionalVertices);
-                nextVert.extends = Vector2.Lerp(smallExtends, prevExtends, Mathf.Sqrt(interp));
-                nextVert.point = Vector3.Lerp(endPoint, startPoint, Mathf.Sqrt(interp));
+                var lastVert = firstAddVert;
+                float interp = ((float)1.0f) / (0.5f * additionalVertices + 1);
+
+
+                firstAddVert.extends = Vector2.Lerp(smallExtends, prevExtends, height(t(interp)));
+                firstAddVert.point = Vector3.Lerp(endPoint, startPoint, t(interp));
+                var thisVert = firstAddVert;
+
+                addPointFunc(0, lastVert, lastVert, thisVert);
+
+
+                interp = ((float)2.0f) / (0.5f * additionalVertices + 1);
+                firstAddVert.extends = Vector2.Lerp(smallExtends, prevExtends, height(t(interp)));
+                firstAddVert.point = Vector3.Lerp(endPoint, startPoint, t(interp));
+
+                var nextVert = firstAddVert;
+
+                for (int i = 1; i <= additionalVertices / 2; i++)
+                {
+                    addPointFunc(i, thisVert, lastVert, nextVert);
+                    lastVert = thisVert;
+                    thisVert = nextVert;
+
+                    interp = ((float)i + 2) / (0.5f * additionalVertices + 1);
+                    nextVert.extends = Vector2.Lerp(smallExtends, prevExtends, height(t(interp)));
+                    nextVert.point = Vector3.Lerp(endPoint, startPoint, t(interp));
+                }
+
+                firstAddVert = lastVert;
             }
 
-            firstAddVert = thisVert;
-        }
+            TubeVertex lastAddVert = vertices[vertices.Count - 1];
+            startPoint = lastAddVert.point;
+            lastAddVert.point += lastAddVert.orientation * Vector3.forward * lastAddVert.extends.x * 0.5f;
+            endPoint = lastAddVert.point;
+            prevExtends = lastAddVert.extends;
 
-        TubeVertex lastAddVert = vertices[vertices.Count - 1];
-        startPoint = lastAddVert.point;
-        lastAddVert.point += lastAddVert.orientation * Vector3.forward * lastAddVert.extends.x * 0.5f;
-        endPoint = lastAddVert.point;
-        prevExtends = lastAddVert.extends;
+            smallExtends = brushType == BrushType.Sphere ? lastAddVert.extends * 0.001f : lastAddVert.extends;
 
-        smallExtends = brushType == BrushType.Sphere ? lastAddVert.extends * 0.001f : lastAddVert.extends;
-
-        lastAddVert.extends = Vector2.Lerp(prevExtends, smallExtends, 1.0f / (0.5f * additionalVertices));
-        lastAddVert.point = Vector3.Lerp(startPoint, endPoint, 1.0f / (0.5f * additionalVertices));
-
-        int firstIndex = additionalVertices / 2;
-        for (int i = 1; i < vertices.Count - 1; i++)
-        {
-            addPointFunc(firstIndex + i, vertices[i], i == 1 ? firstAddVert : vertices[i - 1], i == vertices.Count - 2 ? lastAddVert : vertices[i + 1]);
-        }
-
-        {
-
-            var lastVert = vertices[vertices.Count - 2];
             lastAddVert.extends = Vector2.Lerp(prevExtends, smallExtends, 1.0f / (0.5f * additionalVertices));
             lastAddVert.point = Vector3.Lerp(startPoint, endPoint, 1.0f / (0.5f * additionalVertices));
-            var thisVert = lastAddVert;
-            lastAddVert.extends = Vector2.Lerp(prevExtends, smallExtends, 2.0f / (0.5f * additionalVertices));
-            lastAddVert.point = Vector3.Lerp(startPoint, endPoint, 2.0f / (0.5f * additionalVertices));
-            var nextVert = lastAddVert;
 
-            for (int i = actualVertexCount - additionalVertices / 2 - 1; i < actualVertexCount - 1; i++)
+            int firstIndex = additionalVertices / 2;
+            for (int i = 1; i < vertices.Count - 1; i++)
             {
-                addPointFunc(i, thisVert, lastVert, nextVert);
-                float interp = ((float)actualVertexCount - i) / (0.5f * additionalVertices);
-                lastVert = thisVert;
-                thisVert = nextVert;
-                nextVert.extends = Vector2.Lerp(prevExtends, smallExtends, Mathf.Sqrt(interp));
-                nextVert.point = Vector3.Lerp(endPoint, startPoint, 1.0f - interp * interp);
+                addPointFunc(firstIndex + i, vertices[i], i == 1 ? firstAddVert : vertices[i - 1], i == vertices.Count - 2 ? lastAddVert : vertices[i + 1]);
             }
 
-            lastAddVert.extends = lastAddVert.extends * 0.001f;
-            lastAddVert.point = endPoint;
-            addPointFunc(actualVertexCount - 1, lastAddVert, lastVert, lastAddVert);
+
+            {
+                float interp = 0.0f / (0.5f * additionalVertices + 1);
+
+                var lastVert = vertices[vertices.Count - 2];
+                lastAddVert.extends = Vector2.Lerp(prevExtends, smallExtends, 1.0f - height(1.0f - t(interp)));
+                lastAddVert.point = Vector3.Lerp(startPoint, endPoint, t(interp));
+
+                var thisVert = lastAddVert;
+
+                interp = 1.0f / (0.5f * additionalVertices + 1);
+                lastAddVert.extends = Vector2.Lerp(prevExtends, smallExtends, 1.0f - height(1.0f - t(interp)));
+                lastAddVert.point = Vector3.Lerp(startPoint, endPoint, t(interp));
+                var nextVert = lastAddVert;
+
+                for (int i = actualVertexCount - additionalVertices / 2 - 1; i < actualVertexCount - 1; i++)
+                {
+                    addPointFunc(i, thisVert, lastVert, nextVert);
+                    interp = 1.0f - ((float)actualVertexCount - i - 3) / (0.5f * additionalVertices + 1);
+                    lastVert = thisVert;
+                    thisVert = nextVert;
+                    nextVert.extends = Vector2.Lerp(prevExtends, smallExtends, 1.0f - height(1.0f - t(interp)));
+                    nextVert.point = Vector3.Lerp(startPoint, endPoint, t(interp));
+                }
+
+                lastAddVert.extends = vertices[vertices.Count - 1].extends * 0.001f;
+                lastAddVert.point = endPoint;
+                addPointFunc(actualVertexCount - 1, lastAddVert, lastVert, lastAddVert);
+            }
+        }
+        else
+        {
+            var firstPoint = vertices[0];
+            firstPoint.point -= firstPoint.orientation * Vector3.forward * firstPoint.extends.x * 0.5f;
+
+            var nextPoint = firstPoint;
+            firstPoint.extends *= 0.00001f;
+
+            addPointFunc(0, firstPoint, firstPoint, nextPoint);
+
+            addPointFunc(1, nextPoint, firstPoint, vertices[1]);
+
+            var lastPoint = vertices[vertices.Count - 1];
+            lastPoint.point += lastPoint.orientation * Vector3.forward * lastPoint.extends.x * 0.5f;
+
+            var closingPoint = lastPoint;
+            closingPoint.extends *= 0.00001f;
+
+            var lastAddedPoint = nextPoint;
+
+            for (int i = 1; i < vertices.Count - 1; i++)
+            {
+                addPointFunc(i + 1, vertices[i], lastAddedPoint, i == vertices.Count - 2 ? lastPoint : vertices[i + 1]);
+                lastAddedPoint = vertices[i];
+            }
+
+            addPointFunc(vertices.Count  , lastPoint, lastAddedPoint, closingPoint);
+            addPointFunc(vertices.Count+1, closingPoint, lastPoint, closingPoint);
+
         }
 
 

@@ -23,6 +23,7 @@
 				Blend Off
 				Cull Off
 				ZWrite[_ZWrite]
+				AlphaToMask On
 
 				CGPROGRAM
 				#pragma vertex vert
@@ -90,7 +91,7 @@
 			fixed4 _EmissionColor;
 			float _Unlit;
 			
-            fixed4 frag (v2f i, inout uint coverage : SV_Coverage) : SV_Target
+            fixed4 frag (v2f i) : SV_Target
             {
 				UNITY_SETUP_INSTANCE_ID (i);
 
@@ -100,7 +101,7 @@
 
                 // compute shadow attenuation (1.0 = fully lit, 0.0 = fully shadowed)
                 // darken light's illumination with shadow, keep ambient intact
-                half nl = max(0, abs(dot(i.norm, _WorldSpaceLightPos0.xyz)));
+                half nl = max(0, dot(i.norm, _WorldSpaceLightPos0.xyz));
                 fixed3 lighting = nl * _LightColor0.rgb  + i.ambient;
                 col.rgb *= lerp(lighting, 1, _Unlit);
 				col.rgb += _EmissionColor.rgb;
@@ -113,10 +114,11 @@
                 col = lerp(col, UNITY_ACCESS_INSTANCED_PROP(_TintColor), _OnlyTint);
 #endif
                 col = saturate(col);
-                
+
 				CoverageFragmentInfo f;
 				TRANSFER_COVERAGE_DATA_FRAG(i, f);
-				return ApplyCoverage(col, f, coverage);
+				f.id = 0;
+				return ApplyCoverage(col, f);
             }
             ENDCG
         }

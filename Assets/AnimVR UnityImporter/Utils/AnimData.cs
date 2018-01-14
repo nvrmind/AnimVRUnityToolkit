@@ -14,6 +14,7 @@ using Debug = UnityEngine.Debug;
 using ZipFile = Ionic.Zip.ZipFile;
 using NAudio.Wave;
 using NAudio.Lame;
+using System.Text.RegularExpressions;
 
 #if !ANIM_RUNTIME_AVAILABLE
 public partial class AnimMeshTransform : MonoBehaviour { }
@@ -2760,6 +2761,19 @@ public class AnimData : Singleton<AnimData>
         return anim;
     }
 
+    sealed class Unity20171Fixer : SerializationBinder
+    {
+        Regex match = new Regex(@"UnityEngine\.(.*)");
+        public override Type BindToType(string assemblyName, string typeName)
+        {
+
+            if (!match.IsMatch(assemblyName)) return Type.GetType(String.Format("{0}, {1}", typeName, assemblyName));
+
+            Debug.Log(typeName);
+            return Type.GetType(String.Format("{0}, {1}", typeName, "UnityEngine"));
+        }
+    }
+
     public static StageData LoadFromFile(string filepath)
     {
         StageData stage = null;
@@ -2784,7 +2798,13 @@ public class AnimData : Singleton<AnimData>
 
                 stream.Seek(0, SeekOrigin.Begin);
                 BinaryFormatter bf = new BinaryFormatter();
+
+#if UNITY_2017_2_OR_NEWER
                 stage = (StageData)bf.Deserialize(stream);
+#else
+                bf.Binder = new Unity20171Fixer();
+                stage = (StageData)bf.Deserialize(stream);
+#endif
                 stopwatch.Stop();
             }
         }

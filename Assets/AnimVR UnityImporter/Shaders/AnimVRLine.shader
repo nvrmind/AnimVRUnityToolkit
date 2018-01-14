@@ -1,4 +1,6 @@
-﻿Shader "AnimVR/FuzzyLine" {
+﻿// Upgrade NOTE: replaced '_World2Object' with 'unity_WorldToObject'
+
+Shader "AnimVR/FuzzyLine" {
 	Properties {
 		_Color ("Material Color", Color) = (1,1,1,1)
 		_Map ("Map", 2D) = "white" {}
@@ -12,22 +14,14 @@
 		_FadeOutDistEnd ("Fade out Distance End", Float) = 0.05
 		_TaperDistStart ("Taper Distance at start of line", Float) = 0.1
 		_TaperDistEnd ("Taper Distance at end of line", Float) = 0.1
-		_RingEffectCloseColor ("Ring Effect Close Color", Color) = (1,1,1,1)
-		_RingEffectFarColor ("Ring Effect Far Color", Color) = (1,1,1,1)
-		_RingEffectLineColor ("Ring Effect Line Color", Color) = (1,1,1,1)
-		_RingEffectPointColor ("Ring Effect Point Color", Color) = (1,1,1,1)
-
-		_RingEffectLineWidth ("Ring Effect Line Width", Float) = 0.0015
-		_RingEffectPointWidth ("Ring Effect Point Width", Float) = 0.0015
-		_RingEffectTailWidth ("Ring Effect Tail Length", Float) = 0.0015
-
-		_RingEffectStrength ("Ring Effect Strength", Float) = 0.5
-
 
 		[HideInInspector] _ZWrite ("__zw", Float) = 1.0
 	}
-	
+
+
+
 	CGINCLUDE
+#pragma multi_compile __ FANCY_RENDER_ON
     #include "Tessellation.cginc"
     #include "CoverageTransparency.cginc"
     #include "noiseSimplex.cginc"
@@ -213,7 +207,7 @@
         float averageThickness =  max(length(mul(unity_ObjectToWorld, float4(patch[0].bitangent.xyz, 0))), 
                                       length(mul(unity_ObjectToWorld, float4(patch[1].bitangent.xyz, 0)))); 
         output.edges[0] = data.LineCount; // Detail factor
-        output.edges[1] = data.BrushType == 2 ? 8 : UnityEdgeLengthBasedTessCullLine(patch[0].vertex, patch[1].vertex, _TessAmount * 0.2, averageThickness * 2); // Density factor
+		output.edges[1] = data.BrushType == 2 ? 8 : UnityEdgeLengthBasedTessCullLine(patch[0].vertex, patch[1].vertex, _TessAmount * 0.2, averageThickness * 2); // Density factor
 
         return output;
     }
@@ -334,28 +328,28 @@
         o.splatUv = float2(uvx, uvy);
         o.objPos = v.vertex.xyz;
         o.pos = UnityObjectToClipPos(v.vertex);
-        o.screenPos = ComputeScreenPos(o.pos); 
+		o.screenPos = ComputeScreenPos(o.pos);
         tristream.Append(o);
 
         v.vertex.xyz += right; 
         o.objPos = v.vertex.xyz;
         o.pos = UnityObjectToClipPos(v.vertex);
-        o.screenPos = ComputeScreenPos(o.pos); 
-        o.splatUv = float2(uvx+uvsize, uvy);
+		o.screenPos = ComputeScreenPos(o.pos);
+		o.splatUv = float2(uvx+uvsize, uvy);
         tristream.Append(o);
 
         v.vertex.xyz += -right - up; 
         o.objPos = v.vertex.xyz;
         o.pos = UnityObjectToClipPos(v.vertex);
-        o.screenPos = ComputeScreenPos(o.pos); 
-        o.splatUv = float2(uvx, uvy+uvsize);
+		o.screenPos = ComputeScreenPos(o.pos);
+		o.splatUv = float2(uvx, uvy+uvsize);
         tristream.Append(o);
 
         v.vertex.xyz += right; 
         o.objPos = v.vertex.xyz;
         o.pos = UnityObjectToClipPos(v.vertex);
-        o.screenPos = ComputeScreenPos(o.pos); 
-        o.splatUv = float2(uvx+uvsize, uvy+uvsize);
+		o.screenPos = ComputeScreenPos(o.pos);
+		o.splatUv = float2(uvx+uvsize, uvy+uvsize);
         tristream.Append(o);
 
         tristream.RestartStrip();
@@ -572,11 +566,11 @@
         o.objNorm = v0.normal;
         
         o.pos = v0.vertex - vnorm0 * v0.vertex.w;
-        o.screenPos = ComputeScreenPos(o.pos); 
+		o.screenPos = ComputeScreenPos(o.pos);
         tristream.Append(o);
 
         o.pos = v0.vertex + vnorm0 * v0.vertex.w;
-        o.screenPos = ComputeScreenPos(o.pos); 
+		o.screenPos = ComputeScreenPos(o.pos);
         tristream.Append(o);
 
         o.color = v1.color;
@@ -585,11 +579,11 @@
         o.objNorm = v1.normal;
 
         o.pos = v1.vertex - vnorm1 * v1.vertex.w;
-        o.screenPos = ComputeScreenPos(o.pos); 
+		o.screenPos = ComputeScreenPos(o.pos);
         tristream.Append(o);
 
         o.pos = v1.vertex + vnorm1 * v1.vertex.w;
-        o.screenPos = ComputeScreenPos(o.pos); 
+		o.screenPos = ComputeScreenPos(o.pos);
         tristream.Append(o);
     }
 
@@ -631,10 +625,12 @@
         return lerp(val, grayscale, fac);
     }
 
-    float4 frag(g2f i, inout uint coverage : SV_Coverage) : SV_Target {
+    float4 frag(g2f i) : SV_Target {
         PerLineDataS data = PerLineData[i.dataIndex];
         float4 vertColor = lerp(float4(1,1,1, i.color.a), i.color, _UseVertexColors);
         float4 texSample = 1;
+
+		[branch]
         if(data.TextureIndex == 1) {
             float lineLength = data.LineLength;
             float distanceFromStart = i.uv.y;
@@ -666,8 +662,10 @@
                         textureSampleEnd * endFactor;
         }
 
+
         float4 c = texSample * float4(pow( vertColor.rgb, 2.2), vertColor.a) * _Color;
 
+	
         if(data.BrushType == 2) c *= tex2D (_SplatTex, i.splatUv);
 
         if(data.UseTextureObjectSpace > 0.01) {
@@ -687,6 +685,24 @@
             c *= diff;
         }
 
+		CoverageFragmentInfo f;
+		TRANSFER_COVERAGE_DATA_FRAG(i, f);
+		f.id = i.dataIndex;
+
+#if FANCY_RENDER_ON
+		float3 worldNorm = UnityObjectToWorldNormal(i.objNorm);
+		float3 worldSpaceViewDir = normalize(WorldSpaceViewDir(float4(i.objPos, 1)));
+		float edge =  saturate(dot(worldSpaceViewDir, worldNorm));
+		c.a *= edge * edge; // lerp(0, c.a, (1.0 - blueNoise(i.screenPos.xy / i.screenPos.w * _ScreenParams.xy)) * edge + edge);
+		c.rgb -= blueNoise(int3(f.screenPos.x, f.screenPos.y, i.dataIndex)) * c.rgb * 0.3;
+
+		half nl = max(0, dot(worldNorm, _WorldSpaceLightPos0.xyz));
+		fixed3 lighting = nl * _LightColor0.rgb;
+		c.rgb *= lighting;
+#endif
+
+
+
         if(c.a < 0.01) discard;
 
         float highlightFactor = saturate((1-DoHighlighting) + data.Highlight);
@@ -696,9 +712,8 @@
 
         c.rgb = desaturate(saturate(c.rgb), highlightFactor * 0.5 * DoHighlighting);
 
-        CoverageFragmentInfo f;
-        TRANSFER_COVERAGE_DATA_FRAG(i, f);
-        return ApplyCoverage(c, f, coverage);
+
+        return ApplyCoverage(c, f);
     }
 
     ENDCG
@@ -711,6 +726,7 @@
             Cull Back
             Blend Off
             ZWrite [_ZWrite]
+			AlphaToMask On
                 
             CGPROGRAM
             #pragma target 5.0
@@ -725,11 +741,12 @@
         Pass {
             Name "ShadowCaster"
             Tags { "Queue"="Geometry" "RenderType"="Opaque" "DisableBatching" = "True" "LightMode" = "ShadowCaster" }
-
+			
+			AlphaToMask On
             Fog { Mode Off }
             ZWrite On ZTest Less Cull Off
             Offset 1, 1
-                    
+                   
             CGPROGRAM
             #pragma multi_compile_shadowcaster
             #pragma fragmentoption ARB_precision_hint_fastest

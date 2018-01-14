@@ -2,74 +2,75 @@
 #pragma shader_feature  _COVERAGE_OLD
 
 uniform int _FrameIndex;
-uniform sampler2D _CoverageBlueNoise;
+UNITY_DECLARE_TEX2DARRAY(_CoverageBlueNoise);
 
 #include "UnityCG.cginc"
 
 #define COVERAGE_DATA \
 	float4 pos : SV_POSITION; \
-	float4 screenPos :TEXCOORD6; \
-
+	float4 screenPos : TEXCOORD7; \
 
 struct CoverageFragmentInfo {
+	int id;
 	COVERAGE_DATA
 };
-	 
+
 #define TRANSFER_COVERAGE_DATA_VERT(v, o) \
 	o.pos = UnityObjectToClipPos(v.vertex); \
-	o.screenPos = ComputeScreenPos(o.pos); 
+	o.screenPos = ComputeScreenPos(o.pos); \
 
-#define TRANSFER_COVERAGE_DATA_FRAG(f, o) \
-	o.pos = f.pos; \
-	o.screenPos = f.screenPos; 
+#if UNITY_SINGLE_PASS_STEREO
 
-float blueNoise(float2 uv) {
-	float3 BlueNoise= tex2D(_CoverageBlueNoise, uv/256).rgb;
-	return BlueNoise.x;
+#define TRANSFER_COVERAGE_DATA_FRAG(i, f) \
+	f.pos = i.pos; \
+    f.screenPos = i.screenPos; \
+	f.screenPos.xy /= f.screenPos.w; \
+	float4 scaleOffset = unity_StereoScaleOffset[unity_StereoEyeIndex]; \
+	f.screenPos.xy = (f.screenPos.xy - scaleOffset.zw) / scaleOffset.xy; \
+	f.screenPos.xy *= _ScreenParams.xy \
+
+#else
+
+#define TRANSFER_COVERAGE_DATA_FRAG(i, f) \
+	f.pos = i.pos; \
+	f.screenPos = i.screenPos; \
+	f.screenPos.xy /= f.screenPos.w; \
+	f.screenPos.xy *= _ScreenParams.xy
+
+#endif
+
+
+
+float blueNoise(int3 coords) {
+	return _CoverageBlueNoise.Load( int4(coords & 63, 0) ).a;
 }
 
 float rand(float2 co) {
 	return frac(sin(dot(co.xy ,float2(12.9898,78.233))) * 43758.5453);
 }
 
-float InterleavedGradientNoise( float2 uv ) {
-	const float3 magic = float3( 0.06711056, 0.00583715, 52.9829189 );
-	return frac(magic.z * frac(dot(uv, magic.xy)));
-}
- 
-uint BarrelShift8Bit(uint In, uint shift) {
-	uint b = In | (In << 8);
-	return (b >> shift) & 0xff;
-}
- 
-uint ComputeAlpha2CoverageNoDither(float InAlpha, int InMSAASampleCount) {
-	return (0xff00 >> uint(InAlpha * InMSAASampleCount + 0.5f)) & 0xff;
-}
- 
-int ComputeAlpha2CoverageDither(float InAlpha, float2 SVPos, uint frameID){
-	int MSAASampleCount = 8;
-			
-	float RandNorm = InterleavedGradientNoise(SVPos + float2(0, frameID % 4) * 0.7 );
-	float ditherOffset = (RandNorm - 0.5);
-	const float DitherRange = 1.0f / MSAASampleCount;
-	float AlphaWithDither = clamp(InAlpha + ditherOffset * DitherRange, 0.0, 1.0);
-	uint shift = uint(RandNorm *  6.99999f);
-	return int(BarrelShift8Bit(ComputeAlpha2CoverageNoDither(AlphaWithDither, MSAASampleCount), shift));
+float checkerBoard(float2 co) {
+	return 0.5 * min(uint(co.x) % 2 + uint(co.y) % 2, 1);
 }
 
-float4 ApplyCoverage(float4 c, CoverageFragmentInfo i, inout uint coverage : SV_Coverage) {
-	#if _COVERAGE_OLD
-	float2 screenUv = i.pos.xy * _ScreenParams.xy;
-	#else
-	float2 screenUv = i.screenPos.xy / i.screenPos.w * _ScreenParams.xy;
-	#endif
+
+float4 ApplyCoverage(float4 c, CoverageFragmentInfo i) { //, inout uint coverage : SV_Coverage) {
 			     
-	#if _COVERAGE_SEED_EYE
-	int index = unity_CameraProjection[0][2] < 0 ? _FrameIndex : (8 - _FrameIndex);
-	#else
-	int index = _FrameIndex;
-	#endif
-	coverage = ComputeAlpha2CoverageDither(c.a, screenUv, index);
-			
-	return  float4( c.rgb, 1.0 );
+	uint index = unity_CameraProjection[0][2] < 0 ? _FrameIndex + 10 : _FrameIndex;
+
+	//float BlueNoise = blueNoise(i.screenPos + float2(index, index + 17) * 0);
+
+	//BlueNoise = mad(BlueNoise, 2.0f, -1.0f);
+	//BlueNoise = sign(BlueNoise)*(1.0f - sqrt(1.0f - abs(BlueNoise)));
+
+	//float AlphaWithDither = saturate(c.a + BlueNoise * 1.0/4);
+	
+	const int MSAASampleCount = 8;
+	const float DitherRange = 1.0 / MSAASampleCount;
+
+	float RandNorm = blueNoise( int3( int2(i.screenPos.x, i.screenPos.y), _FrameIndex + i.id) );
+	float ditherOffset = (RandNorm - 0.5);
+	float AlphaWithDither = saturate(c.a + 0.99 * ditherOffset * DitherRange);
+
+	return float4( c.rgb, AlphaWithDither);
 }
