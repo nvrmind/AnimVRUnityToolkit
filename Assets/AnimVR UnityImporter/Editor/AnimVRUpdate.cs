@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 [InitializeOnLoad]
 public class AnimVRUpdate : EditorWindow
 {
-    const string currentVersion = "8.11.2";
+    const string currentVersion = "8.14.1";
     const string versionUrl = "http://animvr.capella.uberspace.de/unity_toolkit/version.txt";
     const string notesUrl =   "http://animvr.capella.uberspace.de/unity_toolkit/notes_{0}.txt";
     const string pluginUrl = "http://unity.nvrmind.io";
