@@ -536,7 +536,7 @@ public static class MeshUtils
         return o;
     }
 
-    private static float smoothstep(float edge0, float edge1, float x)
+    public static float smoothstep(float edge0, float edge1, float x)
     {
         float t = Mathf.Clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
         if (float.IsNaN(t)) t = 0;

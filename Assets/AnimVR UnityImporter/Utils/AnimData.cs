@@ -15,6 +15,8 @@ using ZipFile = Ionic.Zip.ZipFile;
 using NAudio.Wave;
 using NAudio.Lame;
 using System.Text.RegularExpressions;
+using System.Collections;
+using System.Threading;
 
 #if !ANIM_RUNTIME_AVAILABLE
 public partial class AnimMeshTransform : MonoBehaviour { }
@@ -29,7 +31,9 @@ public class AnimSymbol : AnimPlayable { }
 public class AnimTimeline : AnimPlayable { }
 public class AnimCam : AnimPlayable { }
 public class AnimAudio : AnimPlayable { }
+public class AnimVideo : AnimPlayable { }
 public class AnimMesh : AnimPlayable { }
+public class AnimSkybox : AnimPlayable { }
 public class AnimUnityImport : AnimPlayable { }
 
 public class AnimPuppet : AnimPlayable { }
@@ -45,7 +49,20 @@ public enum AudioStorageType { Raw, Compressed, Mp3 }
 namespace AnimVR
 {
     public enum LoopType { Loop, OneShot, Hold }
+    public enum TrimLoopType { Loop, OneShot, Hold, Infinity }
     public enum CreateMode { After, Before, End, Start }
+
+    [Flags]
+    public enum FrameFadeMode
+    {
+        FadeOpacity = 1,
+        FadeOpacityAlongLine = 2,
+        FadeWidth = 4,
+        FadeWidthAlongLine = 8,
+        RandomOffset = 16,
+        EndToStart = 32,
+    }
+
 }
 
 public static class AudioDataUtils
@@ -57,7 +74,7 @@ public static class AudioDataUtils
         switch (storageType)
         {
             case AudioStorageType.Raw: return DecodeClipFromRaw(memory, channels, frequency);
-            case AudioStorageType.Mp3: return DecodeClipFromMp3(memory, channels, frequency);
+            case AudioStorageType.Mp3: return DecodeClipFromMp3(memory);
         }
 
         return null;
@@ -132,14 +149,149 @@ public static class AudioDataUtils
         }*/
     }
 
-    private static AudioClip DecodeClipFromMp3(byte[] encodedSamples, int channels, int frequency)
+    private static AudioClip DecodeClipFromMp3(byte[] encodedSamples)
     {
+        int channels, frequency;
         var samples = DecodeSamplesFromMp3(encodedSamples, out channels, out frequency);
         AudioClip clip = AudioClip.Create("", samples.Length / channels, channels, frequency, false);
         clip.SetData(samples, 0);
         clip.LoadAudioData();
 
         return clip;
+    }
+
+
+    public class StreamAudioFileResult
+    {
+        public List<float> samples = new List<float>();
+        public int channels = 0;
+        public int frequency = 0;
+        public int totalSamples = 0;
+    }
+
+    public static IEnumerator DecodeSamplesFromFileAsync(string filename, StreamAudioFileResult result)
+    {
+        if(Path.GetExtension(filename).ToLower() == ".ogg")
+        {
+            NVorbis.VorbisReader reader = null;
+
+            try
+            {
+                var createThread = new Thread(() => reader = new NVorbis.VorbisReader(filename));
+                createThread.Start();
+
+                while (createThread.ThreadState != System.Threading.ThreadState.Stopped) yield return null;
+
+                createThread.Join();
+
+                if (reader == null)
+                {
+                    result.channels = -1;
+                    Debug.LogException(new Exception("Failed to load audio file: " + filename));
+                    yield break;
+                }
+
+                result.frequency = reader.SampleRate;
+                result.channels = reader.Channels;
+                result.totalSamples = reader.TotalSamples != long.MaxValue ? (int)reader.TotalSamples : 0;
+                
+
+                float[] buffer = new float[result.channels * result.frequency / 5];
+                int totalRead = 0;
+                int bytesRead;
+                while ((bytesRead = reader.ReadSamples(buffer, 0, buffer.Length)) > 0)
+                {
+                    totalRead += bytesRead;
+
+                    if (bytesRead == buffer.Length)
+                    {
+                        result.samples.AddRange(buffer);
+                    }
+                    else
+                    {
+                        result.samples.AddRange(buffer.Take(bytesRead));
+                    }
+
+                    yield return null;
+                }
+
+                if(result.totalSamples == 0)
+                {
+                    result.totalSamples = (int)reader.DecodedPosition;
+                }
+
+            }
+            finally
+            {
+                if (reader != null)
+                {
+                    reader.Dispose();
+                }
+            }
+        }
+        else
+        {
+            NAudio.Wave.AudioFileReader reader = null;
+            try
+            {
+                var createThread = new Thread(() => reader = new NAudio.Wave.AudioFileReader(filename));
+                createThread.Start();
+
+                while (createThread.ThreadState != System.Threading.ThreadState.Stopped) yield return null;
+
+                createThread.Join();
+
+                if (reader == null)
+                {
+                    result.channels = -1;
+                    Debug.LogException(new Exception("Failed to load audio file: " + filename));
+                    yield break;
+                }
+
+                result.frequency = reader.WaveFormat.SampleRate;
+                result.channels = reader.WaveFormat.Channels;
+                result.totalSamples = (int)reader.Length/(4 * reader.WaveFormat.Channels);
+
+                NAudio.Wave.SampleProviders.SampleChannel channel = new NAudio.Wave.SampleProviders.SampleChannel(reader, false);
+
+                float[] buffer = new float[channel.WaveFormat.AverageBytesPerSecond / 20];
+                int totalRead = 0;
+                int bytesRead;
+                do
+                {
+                    bytesRead = channel.Read(buffer, 0, buffer.Length);
+                    totalRead += bytesRead;
+
+                    if (bytesRead == buffer.Length)
+                    {
+                        result.samples.AddRange(buffer);
+                    }
+                    else
+                    {
+                        result.samples.AddRange(buffer.Take(bytesRead));
+                    }
+
+                    yield return null;
+                } while (bytesRead > 0);
+            }
+            finally
+            {
+                if (reader != null)
+                {
+                    reader.Dispose();
+                }
+            }
+        }
+    }
+
+    public static float[] DecodeSamplesFromFile(string filename, out int channels, out int frequency)
+    {
+        StreamAudioFileResult result = new StreamAudioFileResult();
+        var loadFile = DecodeSamplesFromFileAsync(filename, result);
+        channels = result.channels;
+        frequency = result.frequency;
+        while (loadFile.MoveNext()) { }
+        return result.samples.ToArray();
     }
 
     public static float[] DecodeSamplesFromMp3(byte[] encodedSamples, out int channels, out int frequency)
@@ -179,8 +331,6 @@ public static class AudioDataUtils
             return samples.ToArray();
         }
     }
-
-
 
     private static byte[] EncodeClipToOgg(AudioClip clip)
     {
@@ -254,6 +404,11 @@ public static class AudioDataUtils
 public static class ListExtensions
 {
     static Dictionary<Type, System.Reflection.MethodInfo> DeepCopyMethodCache = new Dictionary<Type, System.Reflection.MethodInfo>();
+
+    public static T Last<T>(this List<T> list)
+    {
+        return list[list.Count - 1];
+    }
 
     public static List<T> DeepCopy<T>(this List<T> list)
     {
@@ -1211,6 +1366,12 @@ public class FrameData : IAnimData, IDeepCopy<FrameData>
         }
     }
 
+    [OptionalField]
+    public FrameFadeMode FadeModeIn = FrameFadeMode.FadeOpacity;
+
+    [OptionalField]
+    public FrameFadeMode FadeModeOut = FrameFadeMode.FadeOpacity;
+
     public bool isInstance = false;
     public List<LineData> Lines = new List<LineData>();
     public SerializableTransform transform = new SerializableTransform();
@@ -1243,6 +1404,8 @@ public class FrameData : IAnimData, IDeepCopy<FrameData>
         result.Lines = Lines.DeepCopy();
         result.name = name;
         result.transform = transform.DeepCopy();
+        result.FadeModeIn = FadeModeIn;
+        result.FadeModeOut = FadeModeOut;
         return result;
     }
 
@@ -1272,6 +1435,8 @@ public class TimeLineData : PlayableData
 {
     public List<FrameData> Frames = new List<FrameData>();
 
+    [OptionalField]
+    public bool FrameFadeInOutLinked = true;
 
     public AnimTimeline attachedTimeline { get { return base.attachedPlayable as AnimTimeline; } }
 
@@ -1305,10 +1470,25 @@ public class TimeLineData : PlayableData
     {
         var result = new TimeLineData();
         PlayableData.CopyPlayableData(this, result);
-
+        result.FrameFadeInOutLinked = FrameFadeInOutLinked;
         result.Frames = Frames.DeepCopy();
 
         return result;
+    }
+
+    [OnDeserialized]
+    private void FormatDataDeserialized(StreamingContext sc)
+    {
+        if (SaveDataVersion == 0)
+        {
+            TrimLoopIn = TrimLoopOut = TrimLoopType.Infinity;
+            FrameFadeInOutLinked = true;
+            foreach(var f in Frames)
+            {
+                f.FadeModeIn = f.FadeModeOut = FrameFadeMode.FadeOpacity;
+            }
+            SaveDataVersion = 3;
+        }
     }
 }
 
@@ -1464,8 +1644,6 @@ public class StaticMeshData : PlayableData
         }
     }
 
-
-
     public override int GetFrameCount(float fps)
     {
         return InstanceMap.Count;
@@ -1515,6 +1693,8 @@ public class CameraData : PlayableData
     [OptionalField] public bool EnableDOF = true;
     [OptionalField] public bool EnableFog = false;
     [OptionalField] public float SmoothingFactor = 1.0f;
+    [OptionalField] public bool Stereo = false;
+    [OptionalField] public float StereoSeparation = 0.03f;
 
     [OnDeserialized]
     private void FormatDataDeserialize(StreamingContext sc)
@@ -1543,6 +1723,8 @@ public class CameraData : PlayableData
         result.EnableDOF = EnableDOF;
         result.EnableFog = EnableFog;
         result.SmoothingFactor = SmoothingFactor;
+        result.Stereo = Stereo;
+        result.StereoSeparation = StereoSeparation;
 
         return result;
     }
@@ -1669,6 +1851,8 @@ public class PuppetData : PlayableData
 [Serializable]
 public class AudioData : PlayableData
 {
+    public static float[] SILENCE = new float[1024];
+
     public AnimAudio attachedAudio { get { return base.attachedPlayable as AnimAudio; } }
 
     public bool Spatialize;
@@ -1729,6 +1913,64 @@ public class UnityImportData : PlayableData
     }
 }
 
+[Serializable]
+public class VideoData : PlayableData
+{
+    public AnimVideo attachedVideo { get { return base.attachedPlayable as AnimVideo; } }
+
+    public string videoUrl;
+    public StereoscopicLayout Layout;
+
+    public override PlayableData DeepCopy()
+    {
+        var result = new VideoData();
+        PlayableData.CopyPlayableData(this, result);
+        result.videoUrl = videoUrl;
+        result.Layout = Layout;
+        return result;
+    }
+}
+
+namespace AnimVR
+{
+    public enum StereoscopicLayout
+    {
+        None = 0,
+        SideBySide = 1,
+        OverUnder = 2,
+    }
+
+    [Serializable]
+    public class SkyboxData : PlayableData
+    {
+        public AnimSkybox attachedSkybox { get { return base.attachedPlayable as AnimSkybox; } }
+
+        public float distance = 1;
+        public string videoUrl = null;
+        public byte[] textureData = null;
+        public SerializableColor color = new SerializableColor(1, 1, 1, 1);
+        public float yRotation = 0;
+        public StereoscopicLayout Layout;
+        public int frameCount = 1;
+
+
+        public override PlayableData DeepCopy()
+        {
+            var result = new SkyboxData();
+            PlayableData.CopyPlayableData(this, result);
+            result.videoUrl = videoUrl;
+            result.textureData = textureData.DeepCopy();
+            result.color = color;
+            result.distance = distance;
+            result.yRotation = yRotation;
+            result.Layout = Layout;
+            result.frameCount = frameCount;
+
+            return result;
+        }
+    }
+}
+
 public enum PlayableLicenseType
 {
     AllRightsReserved,
@@ -1761,6 +2003,8 @@ public class
     PlayableData : IAnimData, IDeepCopy<PlayableData>
 {
     [OptionalField]
+    public int SaveDataVersion = 3;
+    [OptionalField]
     public bool isVisible = true;
     [OptionalField]
     public float opacity = 1.0f;
@@ -1769,6 +2013,8 @@ public class
     [OptionalField]
     public string displayName = "Symbol";
 
+    [OptionalField] public bool didChangeTrimLength = false;
+  
     [OptionalField] public bool expandedInLayerList = true;
     [Obsolete("Use expandedInLayerList to synchronyze the expanded state between views.", true)]
     [OptionalField]
@@ -1798,9 +2044,27 @@ public class
     public LoopType LoopOut = LoopType.Loop;
 
     [OptionalField]
+    public TrimLoopType TrimLoopIn = TrimLoopType.Infinity;
+    [OptionalField]
+    public TrimLoopType TrimLoopOut = TrimLoopType.Infinity;
+
+    [OptionalField]
     public float FadeIn;
     [OptionalField]
     public float FadeOut;
+
+    [OptionalField]
+    [Obsolete("Always use these values!", true)]
+    public bool UseTrimIn; 
+    [OptionalField]
+    public int TrimIn;
+
+    [OptionalField]
+    [Obsolete("Always use these values!", true)]
+    public bool UseTrimOut;
+    [OptionalField]
+    public int TrimOut;
+
 
     [OptionalField]
     public PlayableAttributionInfo AttributionInfo;
@@ -1811,6 +2075,8 @@ public class
     public int FrameIndex = 0;
 
     [OptionalField] public int AbsoluteTimeOffset = 0;
+
+    [OptionalField] public int ColorCorrectionTexture = -1;
 
     public MonoBehaviour attachedObj
     {
@@ -1833,6 +2099,16 @@ public class
         return 1;
     }
 
+    public virtual int GetLocalTrimStart(float fps)
+    {
+        return AbsoluteTimeOffset - TrimIn;
+    }
+
+    public virtual int GetLocalTrimEnd(float fps)
+    {
+        return AbsoluteTimeOffset + GetFrameCount(fps) + TrimOut;
+    }
+
     [OnDeserializing]
     private void FormatDataDeserializing(StreamingContext sc)
     {
@@ -1842,6 +2118,8 @@ public class
         UseInOutLoop = false;
         LoopIn = LoopType.Loop;
         LoopOut = LoopType.Loop;
+
+        ColorCorrectionTexture = -1;
     }
 
     [OnDeserialized]
@@ -1850,6 +2128,13 @@ public class
         if (!UseInOutLoop)
         {
             LoopIn = LoopOut = LoopType;
+        }
+
+        if(SaveDataVersion == 0 && !(this is SymbolData) && !(this is TimeLineData))
+        {
+            TrimLoopIn = TrimLoopOut = TrimLoopType.Infinity;
+            didChangeTrimLength = false;
+            SaveDataVersion = 3;
         }
     }
 
@@ -1871,7 +2156,15 @@ public class
         target.opacity = source.opacity;
         target.transform = source.transform.DeepCopy();
         target.AbsoluteTimeOffset = source.AbsoluteTimeOffset;
+        target.ColorCorrectionTexture = source.ColorCorrectionTexture;
         target.AttributionInfo = source.AttributionInfo != null ? source.AttributionInfo.DeepCopy() : null;
+
+        target.didChangeTrimLength = source.didChangeTrimLength;
+        target.TrimIn = source.TrimIn;
+        target.TrimOut = source.TrimOut;
+
+        target.TrimLoopIn = source.TrimLoopIn;
+        target.TrimLoopOut = source.TrimLoopOut;
     }
 
     public virtual PlayableData DeepCopy()
@@ -1918,6 +2211,12 @@ public class SymbolData : PlayableData
     [OptionalField(VersionAdded = 11)]
     public List<UnityImportData> UnityImports = new List<UnityImportData>();
 
+    [OptionalField(VersionAdded = 12)]
+    public List<VideoData> Videos = new List<VideoData>();
+
+    [OptionalField(VersionAdded = 13)]
+    public List<SkyboxData> Skyboxes = new List<SkyboxData>();
+
     [NonSerialized]
     public List<PlayableData> Playables = new List<PlayableData>();
 
@@ -1932,8 +2231,13 @@ public class SymbolData : PlayableData
         if (Cameras == null) Cameras = new List<CameraData>();
         if (Symbols == null) Symbols = new List<SymbolData>();
         if (UnityImports == null) UnityImports = new List<UnityImportData>();
+        if (Videos == null) Videos = new List<VideoData>();
+        if (Skyboxes == null) Skyboxes = new List<SkyboxData>();
 
-        Playables.AddRange(Enumerable.Repeat<PlayableData>(null, TimeLines.Count + Meshes.Count + Puppets.Count + Audios.Count + Cameras.Count + Symbols.Count + UnityImports.Count));
+        Playables.AddRange(Enumerable.Repeat<PlayableData>(null, 
+            TimeLines.Count + Meshes.Count + Puppets.Count + 
+            Audios.Count + Cameras.Count + Symbols.Count + 
+            UnityImports.Count + Videos.Count + Skyboxes.Count));
 
         for (int i = 0; i < TimeLines.Count; i++)
         {
@@ -1970,12 +2274,30 @@ public class SymbolData : PlayableData
             Playables[UnityImports[i].IndexInSymbol] = UnityImports[i];
         }
 
+        for (int i = 0; i < Videos.Count; i++)
+        {
+            Playables[Videos[i].IndexInSymbol] = Videos[i];
+        }
+
+        for (int i = 0; i < Skyboxes.Count; i++)
+        {
+            Playables[Skyboxes[i].IndexInSymbol] = Skyboxes[i];
+        }
+
         for (int i = 0; i < Playables.Count; i++)
         {
             if (Playables[i].displayName == null)
             {
                 Playables[i].displayName = "Layer " + i;
             }
+        }
+
+        if(SaveDataVersion == 0)
+        {
+            TrimLoopIn = (TrimLoopType)LoopIn;
+            TrimLoopOut = (TrimLoopType)LoopOut;
+            didChangeTrimLength = false;
+            SaveDataVersion = 3;
         }
     }
 
@@ -1989,6 +2311,8 @@ public class SymbolData : PlayableData
         Cameras.Clear();
         Symbols.Clear();
         UnityImports.Clear();
+        Videos.Clear();
+        Skyboxes.Clear();
 
         for (int i = 0; i < Playables.Count; i++)
         {
@@ -2001,6 +2325,8 @@ public class SymbolData : PlayableData
             else if (data is CameraData) Cameras.Add(data as CameraData);
             else if (data is SymbolData) Symbols.Add(data as SymbolData);
             else if (data is UnityImportData) UnityImports.Add(data as UnityImportData);
+            else if (data is VideoData) Videos.Add(data as VideoData);
+            else if (data is SkyboxData) Skyboxes.Add(data as SkyboxData);
         }
     }
 
@@ -2009,8 +2335,47 @@ public class SymbolData : PlayableData
 
     public override int GetFrameCount(float fps)
     {
-        return Playables.Max((p) => p.GetFrameCount(fps));
+        return 1;
     }
+
+    public override int GetLocalTrimStart(float fps)
+    {
+        if (didChangeTrimLength)
+        {
+            return AbsoluteTimeOffset - TrimIn;
+        }
+        else
+        {
+            int minClipStart = int.MaxValue;
+            for (int i = 0; i < Playables.Count; i++)
+            {
+                var t = Playables[i];
+                minClipStart = Mathf.Min(minClipStart, t.GetLocalTrimStart(fps));
+            }
+
+            return AbsoluteTimeOffset + (Playables.Count != 0 ? minClipStart : 0) - TrimIn;
+        }
+    }
+
+    public override int GetLocalTrimEnd(float fps)
+    {
+        if (didChangeTrimLength)
+        {
+            return GetLocalTrimStart(fps) + 10 + TrimOut;
+        }
+        else
+        {
+            int lastPlayableEnd = int.MinValue;
+            for (int i = 0; i < Playables.Count; i++)
+            {
+                var t = Playables[i];
+                lastPlayableEnd = Mathf.Max(lastPlayableEnd, t.GetLocalTrimEnd(fps));
+            }
+
+            return AbsoluteTimeOffset + (Playables.Count == 0 ? 1 : lastPlayableEnd) + TrimOut;
+        }
+    }
+
 
     public override bool Equals(object obj)
     {
@@ -2141,6 +2506,114 @@ public struct StorySettings : IDeepCopy<StorySettings>
 }
 
 
+namespace AnimVR
+{
+    public class DownsampledWaveform
+    {
+        public int readyBuckets = 0;
+        public float[] maxValues;
+        public float[] minValues;
+
+        public ComputeBuffer sampleBufferMax;
+        public ComputeBuffer sampleBufferMin;
+        public Mesh mesh;
+        public Material mat;
+             
+        private int lastReadyBuckets = 0;
+        public void UpdateData()
+        {
+            if (lastReadyBuckets == readyBuckets) return;
+
+            sampleBufferMax.SetData(maxValues, lastReadyBuckets, lastReadyBuckets, readyBuckets - lastReadyBuckets);
+            sampleBufferMin.SetData(minValues, lastReadyBuckets, lastReadyBuckets, readyBuckets - lastReadyBuckets);
+            mat.SetFloat("_ValueCount", readyBuckets);
+
+            lastReadyBuckets = readyBuckets;
+        }
+
+        public void Cleanup()
+        {
+            if (sampleBufferMax != null) sampleBufferMax.Release();
+            if (sampleBufferMin != null) sampleBufferMin.Release();
+
+            GameObject.Destroy(mesh);
+            GameObject.Destroy(mat);
+        }
+    }
+
+    public static class RenderWaveformUtils
+    {
+        public static DownsampledWaveform InitializeResult(float[] samples, int channels, int sampleRate, int bucketsPerSecond)
+        {
+            DownsampledWaveform result = new DownsampledWaveform();
+
+            float seconds = (float)(samples.Length / channels) / sampleRate;
+            int buckets = (int)(seconds * bucketsPerSecond);
+
+            result.maxValues = new float[buckets];
+            result.minValues = new float[buckets];
+            result.readyBuckets = 0;
+
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[result.maxValues.Length];
+
+            int[] indices = new int[result.maxValues.Length];
+            for (int i = 0; i < indices.Length; i++) indices[i] = i;
+
+            mesh.SetIndices(indices, MeshTopology.LineStrip, 0, false);
+            mesh.bounds = new Bounds(new Vector3(0.5f, 0, 0), Vector3.one);
+
+            result.mesh = mesh;
+
+            result.sampleBufferMax = new ComputeBuffer(result.maxValues.Length, sizeof(float), ComputeBufferType.Default);
+            result.sampleBufferMin = new ComputeBuffer(result.maxValues.Length, sizeof(float), ComputeBufferType.Default);
+
+            result.mat = new Material(Shader.Find("AnimVR/Waveform"));
+
+            result.mat.SetBuffer("_MaxValues", result.sampleBufferMax);
+            result.mat.SetBuffer("_MinValues", result.sampleBufferMin);
+            result.mat.SetFloat("_TotalValueCount", result.sampleBufferMin.count);
+            result.mat.color = new Color(0, 181.0f/255, 1, 1);
+
+            result.UpdateData();
+
+            return result;
+        }
+
+        public static IEnumerator DownsampleWaveform(float[] samples, DownsampledWaveform result)
+        {
+            int samplesPerBucket = samples.Length / result.maxValues.Length;
+
+            for (int i = 0; i < result.maxValues.Length; i++)
+            {
+                float bucketMax = float.MinValue;
+                float bucketMin = float.MaxValue;
+
+                for (int s = 0; s < samplesPerBucket; s++)
+                {
+                    int sampleIndex = i * samplesPerBucket + s;
+                    float sample = samples[sampleIndex];
+
+                    bucketMax = Mathf.Max(bucketMax, sample);
+                    bucketMin = Mathf.Min(bucketMin, sample);
+                }
+
+                result.maxValues[i] = bucketMax;
+                result.minValues[i] = bucketMin;
+                result.readyBuckets = i;
+
+                if ((i + 1) % 10 == 0)
+                {
+                    result.UpdateData();
+                    yield return null;
+                }
+            }
+
+            result.UpdateData();
+        }
+    }
+}
+
 [Serializable]
 public class AudioDataPool : IDeepCopy<AudioDataPool>
 {
@@ -2254,10 +2727,46 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
     [NonSerialized]
     public List<AudioPoolEntry<AudioClip>> runtimePoolEntries = new List<AudioPoolEntry<AudioClip>>();
 
+    [NonSerialized]
+    public List<AudioPoolEntry<DownsampledWaveform>> renderedWaveforms = new List<AudioPoolEntry<DownsampledWaveform>>();
+
     [OnDeserializing]
     void FormatDataDeserializing(StreamingContext sc)
     {
         runtimePoolEntries = new List<AudioPoolEntry<AudioClip>>();
+        renderedWaveforms = new List<AudioPoolEntry<DownsampledWaveform>>();
+    }
+
+    public bool PoolContainsKey(AudioPoolKey key)
+    {
+        return poolEntries.FindIndex(e => e.key == key) != -1;
+    }
+
+    public class RetrieveWaveformResult
+    {
+        public DownsampledWaveform data;
+    }
+
+    public IEnumerator RetrievWaveformFromPoolAsync(AudioPoolKey key, RetrieveWaveformResult result)
+    {
+        int waveformIndex = renderedWaveforms.FindIndex(e => e.key == key);
+        if (waveformIndex != -1)
+        {
+            result.data = renderedWaveforms[waveformIndex].data;
+            yield break;
+        }
+
+        var clip = RetrieveClipFromPool(key);
+        if (clip == null) yield break;
+
+        var samples = new float[clip.samples * clip.channels];
+        clip.GetData(samples, 0);
+
+        result.data = RenderWaveformUtils.InitializeResult(samples, clip.channels, clip.frequency, 100);
+
+        renderedWaveforms.Add(new AudioPoolEntry<DownsampledWaveform>() { data = result.data, key = key });
+
+        yield return RenderWaveformUtils.DownsampleWaveform(samples, result.data);
     }
 
     public AudioClip RetrieveClipFromPool(AudioPoolKey key)
@@ -2328,6 +2837,56 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
         return key;
     }
 
+    public class AddWavToPoolResult
+    {
+        public AudioPoolKey key;
+    }
+
+    public IEnumerator AddWavToPoolAsync(float[] samples, int channels, int frequency, AddWavToPoolResult result)
+    {
+        HashAlgorithm ha = SHA1.Create();
+        AudioStorageType storageType = AudioStorageType.Raw;
+        byte[] encodedSamples = null;
+        AudioPoolKey key = new AudioPoolKey();
+
+        Thread encodeThread = new Thread(() =>
+        {
+            encodedSamples = AudioDataUtils.EncodeSamples(samples, channels, frequency, out storageType);
+
+            key.length = encodedSamples.Length;
+            key.hash = ha.ComputeHash(encodedSamples);
+        });
+
+        encodeThread.Start();
+
+        while (encodeThread.ThreadState != System.Threading.ThreadState.Stopped) yield return null;
+
+        encodeThread.Join();
+
+        if(encodedSamples == null)
+        {
+            throw new Exception("Failed to add wave to pool!");
+        }
+
+        var boolHasKey = PoolContainsKey(key);
+        if (!boolHasKey)
+        {
+            poolEntries.Add(new AudioPoolEntry<AudioPoolData>()
+            {
+                key = key,
+                data = new AudioPoolData()
+                {
+                    channels = channels,
+                    frequency = frequency,
+                    data = encodedSamples,
+                    storageType = storageType
+                }
+            });
+        }
+
+        result.key = key;
+    }
+
     public AudioPoolKey AddMp3ToPool(byte[] encodedSamples)
     {
         int channels, frequency;
@@ -2359,6 +2918,58 @@ public class AudioDataPool : IDeepCopy<AudioDataPool>
     }
 }
 
+namespace AnimVR
+{
+    [Serializable]
+    public class GlobalSettings : IDeepCopy<GlobalSettings>
+    {
+        public List<int> FpsPresets = new List<int>() { 6, 8, 12, 24, 25, 30, 60 };
+        public SerializableColor BackgroundColor;
+        public bool ShowFloor = true;
+
+        public GlobalSettings DeepCopy()
+        {
+            var result = new GlobalSettings();
+            result.FpsPresets = FpsPresets.DeepCopy();
+            result.BackgroundColor = BackgroundColor;
+            result.ShowFloor = ShowFloor;
+            return result;
+        }
+    }
+}
+
+[Serializable]
+public class WorkspaceSettings : IDeepCopy<WorkspaceSettings>
+{
+    public bool ShowFloor = true;
+    public bool ShowBigScreen = false;
+    public SerializableVector3 BigScreenPos = new Vector3(2.43f, 3.574f, 7.21f);
+    public float MasterVolume = 1;
+    public bool MuteSound = false;
+    public bool ShowGizmos = true;
+    public float BrushSmoothAmount = 0;
+    public float AnimBrushLength = 12;
+    public bool EnableAmbientOcclusion = false;
+    public float FPS = 24;
+
+    public WorkspaceSettings DeepCopy()
+    {
+        var result = new WorkspaceSettings();
+        result.ShowFloor = ShowFloor;
+        result.ShowBigScreen = ShowBigScreen;
+        result.BigScreenPos = BigScreenPos;
+        result.MasterVolume = MasterVolume;
+        result.MuteSound = MuteSound;
+        result.ShowGizmos = ShowGizmos;
+        result.BrushSmoothAmount = BrushSmoothAmount;
+        result.AnimBrushLength = AnimBrushLength;
+        result.EnableAmbientOcclusion = EnableAmbientOcclusion;
+        result.FPS = FPS;
+
+        return result;
+    }
+}
+
 [System.Serializable]
 #pragma warning disable CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 #pragma warning disable CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
@@ -2367,10 +2978,14 @@ public class StageData : IAnimData, IDeepCopy<StageData>
 #pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
     [OptionalField(VersionAdded = 2)]
-    public int SaveDataVersion = 2;
+    public int SaveDataVersion = 3;
 
     [OptionalField(VersionAdded = 5)]
+    [Obsolete("Use workspace settings instead.", true)]
     public bool floorOn = true;
+
+    [OptionalField]
+    public WorkspaceSettings workspaceSettings = new WorkspaceSettings();
 
     [OptionalField]
     public int SelectedSymbol = 0;
@@ -2387,11 +3002,13 @@ public class StageData : IAnimData, IDeepCopy<StageData>
 
     [NonSerialized] public PlayableData activePlayable;
     [NonSerialized]
+    [Obsolete("We always loop around the active playable if that is enabled.", true)]
     public PlayableData loopAroundPlayable;
 
     [OptionalField]
     public string activePlayablePath;
     [OptionalField]
+    [Obsolete("We always loop around the active playable if that is enabled.", true)]
     public string loopAroundPlayablePath;
 
     string IAnimData.name
@@ -2408,7 +3025,7 @@ public class StageData : IAnimData, IDeepCopy<StageData>
     }
 
     public Guid guid = Guid.Empty;
-    public float fps = 12;
+    public float fps = 24;
 
     [OptionalField] public int timelineLength = 120;
     [OptionalField] public int playheadPosition = 0;
@@ -2423,6 +3040,9 @@ public class StageData : IAnimData, IDeepCopy<StageData>
     public SerializableTransform transform = new SerializableTransform();
     public SerializableColor backgroundColor = new SerializableColor();
     public SerializableTransform Trans { get { return transform; } }
+
+    [OptionalField]
+    public List<byte[]> ColorLUTs = new List<byte[]>();
 
     public MonoBehaviour attachedObj
     {
@@ -2471,25 +3091,27 @@ public class StageData : IAnimData, IDeepCopy<StageData>
 
         AudioDataPool.KeepKeys(usedKeys);
 
-        loopAroundPlayablePath = loopAroundPlayable == null ? "" : PathOf(loopAroundPlayable);
         activePlayablePath = activePlayable == null ? "" : PathOf(activePlayable);
     }
 
     [OnDeserializing]
     private void FormatDataDeserializing(StreamingContext sc)
     {
-        fps = 12;
+        fps = 24;
         SelectedSymbol = 0;
         AudioDataPool = null;
+        ColorLUTs = new List<byte[]>();
     }
 
     [OnDeserialized]
     private void FormatDataDeserialized(StreamingContext sc)
     {
-        if (fps == 0) fps = 12;
+        if (fps == 0) fps = 24;
         if (timelineLength == 0) timelineLength = 120;
         if (timelineWindow.x == 0 && timelineWindow.y <= 1) timelineWindow = new SerializableVector2(0, 120);
         if (loopPointerEnd == 0) loopPointerEnd = (int)timelineWindow.y;
+        if (workspaceSettings == null) workspaceSettings = new WorkspaceSettings() { ShowFloor = false };
+        if(workspaceSettings.BigScreenPos.V3.magnitude < 4) workspaceSettings.BigScreenPos = new Vector3(2.43f, 3.574f, 7.21f);
 
         if (AudioDataPool == null)
         {
@@ -2513,11 +3135,6 @@ public class StageData : IAnimData, IDeepCopy<StageData>
         if (!string.IsNullOrEmpty(activePlayablePath))
         {
             activePlayable = FindPlayable(activePlayablePath);
-        }
-
-        if (!string.IsNullOrEmpty(loopAroundPlayablePath))
-        {
-            loopAroundPlayable = FindPlayable(loopAroundPlayablePath);
         }
     }
 
@@ -2545,7 +3162,7 @@ public class StageData : IAnimData, IDeepCopy<StageData>
         StageData result = new StageData();
         result.backgroundColor = backgroundColor;
         result.filename = filename;
-        result.floorOn = floorOn;
+        result.workspaceSettings = workspaceSettings.DeepCopy();
         result.fps = fps;
         result.guid = guid;
         result.name = name;
@@ -2567,10 +3184,10 @@ public class StageData : IAnimData, IDeepCopy<StageData>
         result.ExportedAsStory = ExportedAsStory;
         result.AudioDataPool = AudioDataPool.DeepCopy();
 
-        result.loopAroundPlayablePath = loopAroundPlayablePath;
-        result.loopAroundPlayable = loopAroundPlayable;
         result.activePlayable = activePlayable;
         result.activePlayablePath = activePlayablePath;
+
+        result.ColorLUTs = ColorLUTs.DeepCopy();
 
         return result;
     }
@@ -2774,6 +3391,63 @@ public class AnimData : Singleton<AnimData>
         }
     }
 
+    public static void UpgradeDataFromVersion2(StageData stageData)
+    {
+        stageData.SaveDataVersion = 3;
+
+    }
+
+    public static StageData LoadFromMemory(byte[] memory)
+    {
+        StageData stage = null;
+        try
+        {
+            using (Stream inStream = new MemoryStream(memory))
+            using (Stream stream = new MemoryStream())
+            {
+                Stopwatch stopwatch = Stopwatch.StartNew();
+
+                using (ZipFile archive = ZipFile.Read(inStream))
+                {
+                    archive.ParallelDeflateThreshold = -1;
+                    if (!archive.ContainsEntry("stage"))
+                    {
+                        return null;
+                    }
+                    var entry = archive["stage"];
+                    entry.Extract(stream);
+                }
+
+                var timeExtract = stopwatch.ElapsedMilliseconds;
+
+                stream.Seek(0, SeekOrigin.Begin);
+                BinaryFormatter bf = new BinaryFormatter();
+
+#if UNITY_2017_2_OR_NEWER
+                stage = (StageData)bf.Deserialize(stream);
+#else
+                bf.Binder = new Unity20171Fixer();
+                stage = (StageData)bf.Deserialize(stream);
+#endif
+                stopwatch.Stop();
+
+                if (stage.SaveDataVersion == 2)
+                {
+                    UpgradeDataFromVersion2(stage);
+                }
+            }
+        }
+        catch (Exception _)
+        {
+            Debug.Log(_);
+            Debug.Log("Error loading zip file preview: "  + "\n" + _.Message + "\n" + (_.InnerException != null ? _.InnerException.Message : ""));
+            Debug.Log("Trying old file format!");
+        }
+
+        stage.filename = "Memory";
+        return stage;
+    }
+
     public static StageData LoadFromFile(string filepath)
     {
         StageData stage = null;
@@ -2806,6 +3480,11 @@ public class AnimData : Singleton<AnimData>
                 stage = (StageData)bf.Deserialize(stream);
 #endif
                 stopwatch.Stop();
+
+                if(stage.SaveDataVersion == 2)
+                {
+                    UpgradeDataFromVersion2(stage);
+                }
             }
         }
         catch (Exception _)
@@ -2889,6 +3568,71 @@ public class AnimData : Singleton<AnimData>
         catch (Exception e)
         {
             Debug.Log("Error saving stage file: " + filepath + "\n" + e.Message);
+        }
+    }
+
+
+    public static byte[] WriteToMemory(StageData stage)
+    {
+        try
+        {
+            using (MemoryStream output = new MemoryStream())
+            {
+                try
+                {
+                    using (ICSharpCode.SharpZipLib.Zip.ZipOutputStream s = new ICSharpCode.SharpZipLib.Zip.ZipOutputStream(output))
+                    {
+                        s.IsStreamOwner = false;
+                        s.SetLevel(9); // 0 - store only to 9 - means best compression
+
+                        using (MemoryStream prevStream = new MemoryStream())
+                        {
+                            var bf = new BinaryFormatter();
+                            var previewFrames = stage.previewFrames;
+                            if (previewFrames == null)
+                            {
+                                previewFrames = new byte[1][];
+                                previewFrames[0] = Texture2D.whiteTexture.EncodeToPNG();
+                            }
+
+                            bf.Serialize(prevStream, previewFrames);
+                            prevStream.Seek(0, SeekOrigin.Begin);
+
+                            var entry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("preview");
+                            s.PutNextEntry(entry);
+                            s.Write(prevStream.ToArray(), 0, (int)prevStream.Length);
+                            s.CloseEntry();
+                        }
+
+                        using (MemoryStream stageStream = new MemoryStream())
+                        {
+                            var bf = new BinaryFormatter();
+                            bf.Serialize(stageStream, stage);
+                            stageStream.Seek(0, SeekOrigin.Begin);
+
+                            var entry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("stage");
+                            s.PutNextEntry(entry);
+                            s.Write(stageStream.ToArray(), 0, (int)stageStream.Length);
+                            s.CloseEntry();
+                        }
+
+                        s.Finish();
+                        s.Flush();
+                        s.Close();
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.Log("Error writing zip file: " + "memory" + "\n" + e.Message);
+                }
+
+                return output.ToArray();
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.Log("Error saving stage file: " + "memory" + "\n" + e.Message);
+            return null;
         }
     }
 

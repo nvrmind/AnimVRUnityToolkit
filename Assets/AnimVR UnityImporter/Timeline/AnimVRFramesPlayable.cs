@@ -20,6 +20,7 @@ namespace ANIMVR
             if (!Parent) return;
 
             var time = playable.GetTime();
+
             int index = Mathf.FloorToInt((float)(time * FPS)) % FrameIndices.Count;
 
             int currentIndex = FrameIndices[index];

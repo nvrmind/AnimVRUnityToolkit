@@ -84,6 +84,12 @@ namespace ANIMVR
                 }
             }
 
+
+            if(importer.HasFades)
+            {
+                EditorGUILayout.HelpBox("This scene uses features that are not yet supported in the Unity Toolkit!\n - Fading layers", MessageType.Warning);
+            }
+
             base.ApplyRevertGUI();
         }
         

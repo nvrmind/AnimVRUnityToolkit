@@ -57,20 +57,17 @@ float checkerBoard(float2 co) {
 float4 ApplyCoverage(float4 c, CoverageFragmentInfo i) { //, inout uint coverage : SV_Coverage) {
 			     
 	uint index = unity_CameraProjection[0][2] < 0 ? _FrameIndex + 10 : _FrameIndex;
-
-	//float BlueNoise = blueNoise(i.screenPos + float2(index, index + 17) * 0);
-
-	//BlueNoise = mad(BlueNoise, 2.0f, -1.0f);
-	//BlueNoise = sign(BlueNoise)*(1.0f - sqrt(1.0f - abs(BlueNoise)));
-
-	//float AlphaWithDither = saturate(c.a + BlueNoise * 1.0/4);
 	
 	const int MSAASampleCount = 8;
 	const float DitherRange = 1.0 / MSAASampleCount;
 
+
+
 	float RandNorm = blueNoise( int3( int2(i.screenPos.x, i.screenPos.y), _FrameIndex + i.id) );
 	float ditherOffset = (RandNorm - 0.5);
 	float AlphaWithDither = saturate(c.a + 0.99 * ditherOffset * DitherRange);
+
+
 
 	return float4( c.rgb, AlphaWithDither);
 }

@@ -26,6 +26,8 @@ Shader "AnimVR/FuzzyLine" {
     #include "CoverageTransparency.cginc"
     #include "noiseSimplex.cginc"
     #include "Lighting.cginc"
+	#include "ColorCorrection.cginc"
+#pragma enable_d3d11_debug_symbols
 
     struct PerLineDataS {
         float4 LineColor;
@@ -47,12 +49,30 @@ Shader "AnimVR/FuzzyLine" {
         float UseTextureObjectSpace;
         float Highlight;
         float WorldScale;
+
+		int FrameDataIndex;
+		float3 __pad;
     };
 
     UNITY_DECLARE_TEX2DARRAY(BrushTextures);
 
+
     StructuredBuffer<PerLineDataS> PerLineData;
+
+	struct PerFrameDataS {
+		float Opacity;
+		int ColorLookupTexture;
+		uint FadeModeIn;
+		uint FadeModeOut;
+		
+		float Fade;
+		float FadeIn;
+		float FadeOut;
+		float __pad;
+	};
     
+	StructuredBuffer<PerFrameDataS> PerFrameData;
+
 	float StageScale;
     float DoHighlighting;
 
@@ -65,7 +85,7 @@ Shader "AnimVR/FuzzyLine" {
     sampler2D _Map;
     float4 _Map_ST;
 
-    fixed4 _Color;
+    float4 _Color;
 
     float _TessAmount;
     float _LightBlending;
@@ -76,6 +96,8 @@ Shader "AnimVR/FuzzyLine" {
 
     float _TaperDistStart;
     float _TaperDistEnd;
+
+
 
     struct v2g {
         float4 vertex : SV_POSITION;
@@ -103,15 +125,59 @@ Shader "AnimVR/FuzzyLine" {
         if(len < 0.000000001) return 0;
         return val/len;
     }
+	
+
+	void ApplyFade(float fade, uint fadeMode, float alongLine, int dataIndex, out float fadeOpacity, out float fadeWidth) {
+		const int FadeOpacity = 1;
+		const int FadeOpacityAlongLine = 2;
+		const int FadeWidth = 4;
+		const int FadeWidthAlongLine = 8;
+		const int RandomOffset = 16;
+		const int EndToStart = 32;
+
+		fadeWidth = 1;
+		fadeOpacity = 1;
+
+		float alongFactor = 1;
+		
+		if (fadeMode & RandomOffset) {
+			float r = rand(float2(dataIndex, 0)) * 0.4;
+			fade = saturate(fade * (1.0 + r) - r);
+		}
+
+		if (fadeMode & EndToStart) {
+			alongLine = 1.0 - alongLine;
+		}
+
+		float frameFade = fade * 1.2 - 0.2;
+		alongFactor = saturate(smoothstep(frameFade + 0.2, frameFade, alongLine));
+
+		
+		if (fadeMode & FadeOpacity) {
+			fadeOpacity = lerp(fade, alongFactor, fadeMode & FadeOpacityAlongLine);
+		}
+
+		if (fadeMode & FadeWidth) {
+			fadeWidth = lerp(fade, alongFactor, fadeMode & FadeWidthAlongLine);
+		}
+
+		fadeWidth = saturate(fadeWidth);
+		fadeOpacity = saturate(fadeOpacity);
+	}
 
     v2g vert (appdata_full v) {
         
         v2g o;
         o.dataIndex = round(v.texcoord.x);
         PerLineDataS data = PerLineData[o.dataIndex];
+		PerFrameDataS frame = PerFrameData[data.FrameDataIndex];
 
         o.vertex = v.vertex;
         o.color = v.color * data.LineColor;
+
+		o.color.a *= frame.Opacity;
+
+
         o.uv = v.texcoord;
         o.uv.x = 0;
 
@@ -129,11 +195,33 @@ Shader "AnimVR/FuzzyLine" {
 
         if(data.OneSided) o.color.a *=  max(0, dot(normalize(worldFacingDir), -worldSpaceViewDir));
 
-        float fadeFac = smoothstep(_FadeOutDistEnd*min(StageScale, 1), _FadeOutDistStart*min(StageScale, 1), viewDist*100);
+		// Not drawing a line
+		if (data.EndTaperFactor > 0.99) {
+			float fadeInOpacity = 1;
+			float fadeInWidth = 1;
 
-        o.normal *= fadeFac ;
-        o.bitangent *= fadeFac;
-        o.color.a *= fadeFac;
+			float fadeOutOpacity = 1;
+			float fadeOutWidth = 1;
+
+			float alongLine = (o.uv.y / data.LineLength);
+			ApplyFade(frame.FadeIn, frame.FadeModeIn, alongLine, o.dataIndex, fadeInOpacity, fadeInWidth);
+			ApplyFade(frame.FadeOut, frame.FadeModeOut, 1.0f - alongLine, o.dataIndex, fadeOutOpacity, fadeOutWidth);
+
+			float fadeOpacity = fadeInOpacity * fadeOutOpacity;
+			float fadeWidth = fadeInWidth * fadeOutWidth;
+
+			o.color.a *= fadeOpacity;
+
+			o.normal *= fadeWidth;
+			o.bitangent *= fadeWidth;
+		}
+
+		
+		if (frame.ColorLookupTexture != -1) {
+			o.color.rgb = ApplyLut2D(frame.ColorLookupTexture, saturate(o.color.rgb));
+		}
+
+
 
         return o;
     }
@@ -247,17 +335,17 @@ Shader "AnimVR/FuzzyLine" {
         v2g output;
         float t = uv.x;
 
-        float t2 = t * t;
-        float t3 = t2 * t;
+		float t2 = t * t;
+		float t3 = t2 * t;
 
-        float3 position = (2.0*t3 - 3.0*t2 + 1.0) * opPos0.xyz  
-                        + (t3 - 2.0*t2 + t) * op[0].tangent
-                        + (-2.0*t3 + 3.0*t2) * opPos1.xyz
-                        + (t3- t2) * op[1].tangent;
+		float3 position = (2.0*t3 - 3.0*t2 + 1.0) * opPos0.xyz
+			+ (t3 - 2.0*t2 + t) * op[0].tangent
+			+ (-2.0*t3 + 3.0*t2) * opPos1.xyz
+			+ (t3 - t2) * op[1].tangent;
 
-        float3 linPos = lerp(opPos0.xyz, opPos1.xyz, t);
+		float3 linPos = lerp(opPos0.xyz, opPos1.xyz, t);
 
-        position = lerp(linPos, position, _HermiteInterpolate);
+		position = lerp(linPos, position, _HermiteInterpolate);
 
         output.dataIndex = op[0].dataIndex;
 
@@ -589,8 +677,7 @@ Shader "AnimVR/FuzzyLine" {
 
     [maxvertexcount(18)]
     void geom(line v2g IN[2], inout TriangleStream<g2f> tristream) {
-        //IN[0].vertex = IN[0].vertex + float4(IN[0].tangent, 0) *0.1;
-        //IN[1].vertex = IN[1].vertex - float4(IN[1].tangent, 0) *0.1;
+
         PerLineDataS data = PerLineData[IN[0].dataIndex];
 
         if(data.BrushType == 0) {
@@ -604,20 +691,6 @@ Shader "AnimVR/FuzzyLine" {
         } else if (data.BrushType == 4) {
             emitRibbon(IN, tristream);
         }
-
-        /*float3 seed = IN[1].vertex;
-        float3 dir = -normalize(mul( float4(_WorldSpaceCameraPos.xyz, 1), unity_WorldToObject).xyz - IN[1].vertex.xyz);
-        for(int i = 0; i < 10; i++) {
-            IN[0] = IN[1];
-
-            IN[1].vertex.xyz += dir * 0.01 + ( IN[1].tangent +
-            ( float3( snoise( float2(rand(seed.xy) ,  _Time.x * 2 + seed.y)), 
-                      snoise( float2(rand(seed.xz * 2 +1),   _Time.x * 4+ 2 + seed.z)), 
-                      snoise( float2(rand(seed.yz + 2),  _Time.x*0.4+seed.x )) ) - 0.3  ) * 0.3 * length(IN[1].tangent)) * 0.6 ;
-            IN[1].tangent = IN[1].vertex.xyz - IN[0].vertex.xyz;
-            IN[1].bitangent = cross(normalize(IN[1].tangent), IN[1].normal);
-            emitLine(IN,tristream);
-        }*/
     }
 
     float3 desaturate(float3 val, float fac) {
@@ -626,6 +699,7 @@ Shader "AnimVR/FuzzyLine" {
     }
 
     float4 frag(g2f i) : SV_Target {
+
         PerLineDataS data = PerLineData[i.dataIndex];
         float4 vertColor = lerp(float4(1,1,1, i.color.a), i.color, _UseVertexColors);
         float4 texSample = 1;
@@ -665,25 +739,27 @@ Shader "AnimVR/FuzzyLine" {
 
         float4 c = texSample * float4(pow( vertColor.rgb, 2.2), vertColor.a) * _Color;
 
-	
         if(data.BrushType == 2) c *= tex2D (_SplatTex, i.splatUv);
 
-        if(data.UseTextureObjectSpace > 0.01) {
-            float3 objNorm = normalize( i.objNorm );
 
-            half3 blend = abs(objNorm);
+		[branch]
+        if(data.UseTextureObjectSpace > 0.5) {
+			float3 objNorm = normalize( i.objNorm );
+
+			half3 blend = abs(objNorm);
             // make sure the weights sum up to 1 (divide by sum of x+y+z)
             blend /= dot(blend,1.0);
-            half3 objSpacePos = i.objPos * 2;
+			half3 objSpacePos = i.objPos * 2;
             // read the three texture projections, for x,y,z axes
             fixed4 diff_x = UNITY_SAMPLE_TEX2DARRAY(BrushTextures, float3(objSpacePos.yz, data.TextureIndex));
             fixed4 diff_y = UNITY_SAMPLE_TEX2DARRAY(BrushTextures, float3(objSpacePos.xz, data.TextureIndex));
             fixed4 diff_z = UNITY_SAMPLE_TEX2DARRAY(BrushTextures, float3(objSpacePos.xy, data.TextureIndex));
             // blend the textures based on weights
-            fixed4 diff = diff_x * blend.x + diff_y * blend.y + diff_z * blend.z;
+			fixed4 diff = diff_x * blend.x + diff_y * blend.y + diff_z * blend.z;
 
-            c *= diff;
+			c *= diff;
         }
+
 
 		CoverageFragmentInfo f;
 		TRANSFER_COVERAGE_DATA_FRAG(i, f);
@@ -701,17 +777,12 @@ Shader "AnimVR/FuzzyLine" {
 		c.rgb *= lighting;
 #endif
 
-
-
-        if(c.a < 0.01) discard;
-
         float highlightFactor = saturate((1-DoHighlighting) + data.Highlight);
         c.a = lerp(c.a * 0.55, c.a, highlightFactor);
 
 		if (data.IsPulsing > 0.5) c.a *= 0.7 + sin(_Time.y*10) * 0.2;
 
         c.rgb = desaturate(saturate(c.rgb), highlightFactor * 0.5 * DoHighlighting);
-
 
         return ApplyCoverage(c, f);
     }

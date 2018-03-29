@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public class FileUtils
 {
@@ -236,4 +237,13 @@ public class FileUtils
 
         return string.Format(pattern, max);
     }
+
+#if ANIM_RUNTIME_AVAILABLE
+    public static string LnkToFile(string fileLink)
+    {
+        IWshRuntimeLibrary.IWshShell wsh = new IWshRuntimeLibrary.WshShellClass();
+        IWshRuntimeLibrary.IWshShortcut sc = (IWshRuntimeLibrary.IWshShortcut)wsh.CreateShortcut(fileLink);
+        return sc.TargetPath;
+    }
+#endif
 }

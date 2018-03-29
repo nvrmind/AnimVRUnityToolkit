@@ -1,5 +1,7 @@
 fileFormatVersion: 2
 guid: 2ca51a15daf0644638eacf38acc65cc8
+timeCreated: 1439457569
+licenseType: Store
 PluginImporter:
   externalObjects: {}
   serializedVersion: 2
@@ -25,7 +27,7 @@ PluginImporter:
   - first:
       Any: 
     second:
-      enabled: 0
+      enabled: 1
       settings:
         Exclude Editor: 0
         Exclude Linux: 0

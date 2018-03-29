@@ -8,7 +8,7 @@ using UnityEngine;
 [ExecuteInEditMode]
 public class TubeRenderer : MonoBehaviour
 {
-    [StructLayout(LayoutKind.Sequential, Pack=1, Size=80)]
+    [StructLayout(LayoutKind.Sequential, Pack=1, Size=96)]
     public struct PerLineData
     {
         public Color LineColor;
@@ -30,6 +30,9 @@ public class TubeRenderer : MonoBehaviour
         public float UseTextureObjectSpace;
         public float Highlight;
         public float WorldScale;
+
+        public int FrameDataIndex;
+        public Vector3 __pad;
     }
 
     public static PerLineData[] PerLineDataCPU;
@@ -68,6 +71,7 @@ public class TubeRenderer : MonoBehaviour
     }
 
 
+    [NonSerialized]
     public List<TubeVertex> vertices = new List<TubeVertex>();
     public Material Material { set { renderer.sharedMaterial = value; } }
 
@@ -99,6 +103,16 @@ public class TubeRenderer : MonoBehaviour
             _lineColor = value;
             if (bufferDataIndex == -1) return;
             PerLineDataCPU[bufferDataIndex].LineColor = LineColor;
+            LineDataIsDirty = true;
+        }
+    }
+
+    public int FrameDataIndex
+    {
+        set
+        {
+            if (bufferDataIndex == -1) return;
+            PerLineDataCPU[bufferDataIndex].FrameDataIndex = value;
             LineDataIsDirty = true;
         }
     }
@@ -564,7 +578,7 @@ public class TubeRenderer : MonoBehaviour
         vertices[index] = vert;
     }
 
-    private static Color ApplyLight(Color val, float light)
+    public static Color ApplyLight(Color val, float light)
     {
         Color result;
         if(light < 0.5f)
