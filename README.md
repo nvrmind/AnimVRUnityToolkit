@@ -10,12 +10,12 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - Create new stages directly in the Unity Editor and open them in AnimVR. When you save, the changes are instantly visible in Unity.
 
 ## Requirements
-- Unity 2017.1
+- Unity 2017.3
 - AnimVR beta
 
 ## Getting Started
 
-- Download the Unity Package [here](https://github.com/nvrmind/AnimVRUnityToolkit/releases/download/v8.14.1_beta/AnimVR.Unity.Toolkit.unitypackage)
+- Download the Unity Package [here](https://github.com/nvrmind/AnimVRUnityToolkit/releases/download/v9.0.5_beta/AnimVR.Unity.Toolkit.unitypackage)
 - Import it into your Unity project as described [here](https://docs.unity3d.com/Manual/AssetPackages.html)
 - Right click in your Unity project panel and choose "Create -> AnimVR -> Stage" (you can also drag an exisiting stage into your project window).
 - Double click the created asset. The first time you do this you'll need to set up the application to open .stage files with. In Windows 10 this done by clicking "More Apps", scrolling all the way down and clicking "Look for another app on this PC". Look for the folder your copy of AnimVR is installed to and choose "ANIMVR.exe".
@@ -23,6 +23,7 @@ This packages allows you to drag the .stage files you create with [AnimVR](https
 - You can drag the imported asset into a stage like any other mesh or prefab. As long as the prefab instance is intact, changes to the stage will be reflected everywhere you are using the prefab.
 
 ## Things to watch out for
+- Some features from AnimVR might not be suppoerted! Currently that is **fading layers**!
 - Currently we only support import on Windows platforms! We plan on supporting MacOS in the future and would love to hear from you if you urgently need MacOS support. Note that this *only* concerns importing stage files. You can still use the imported file on MacOS.
 - Stages with audio need to be imported twice the first time you import them. The import editor will show a "Fixup audio clips" button if that's the case. Just press it and you're good to go!
 
