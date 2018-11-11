@@ -19,14 +19,16 @@ Shader "AnimVR/FuzzyLine" {
 	}
 
 
-
 	CGINCLUDE
-#pragma multi_compile __ FANCY_RENDER_ON
+
     #include "Tessellation.cginc"
-    #include "CoverageTransparency.cginc"
+	#include "Lighting.cginc"
+	#include "AutoLight.cginc"
+	#include "CoverageTransparency.cginc"
     #include "noiseSimplex.cginc"
     #include "Lighting.cginc"
 	#include "ColorCorrection.cginc"
+#pragma multi_compile __ FANCY_RENDER_ON
 #pragma enable_d3d11_debug_symbols
 
     struct PerLineDataS {
@@ -98,7 +100,6 @@ Shader "AnimVR/FuzzyLine" {
     float _TaperDistEnd;
 
 
-
     struct v2g {
         float4 vertex : SV_POSITION;
         float4 color : TEXCOORD1;
@@ -127,42 +128,21 @@ Shader "AnimVR/FuzzyLine" {
     }
 	
 
-	void ApplyFade(float fade, uint fadeMode, float alongLine, int dataIndex, out float fadeOpacity, out float fadeWidth) {
-		const int FadeOpacity = 1;
-		const int FadeOpacityAlongLine = 2;
-		const int FadeWidth = 4;
-		const int FadeWidthAlongLine = 8;
-		const int RandomOffset = 16;
-		const int EndToStart = 32;
+	float4 SrgbToLinear(float4 color) {
+		// Approximation http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
+		float3 sRGB = color.rgb;
+		color.rgb = sRGB * (sRGB * (sRGB * 0.305306011 + 0.682171111) + 0.012522878);
+		return color;
+	}
 
-		fadeWidth = 1;
-		fadeOpacity = 1;
-
-		float alongFactor = 1;
-		
-		if (fadeMode & RandomOffset) {
-			float r = rand(float2(dataIndex, 0)) * 0.4;
-			fade = saturate(fade * (1.0 + r) - r);
-		}
-
-		if (fadeMode & EndToStart) {
-			alongLine = 1.0 - alongLine;
-		}
-
-		float frameFade = fade * 1.2 - 0.2;
-		alongFactor = saturate(smoothstep(frameFade + 0.2, frameFade, alongLine));
-
-		
-		if (fadeMode & FadeOpacity) {
-			fadeOpacity = lerp(fade, alongFactor, fadeMode & FadeOpacityAlongLine);
-		}
-
-		if (fadeMode & FadeWidth) {
-			fadeWidth = lerp(fade, alongFactor, fadeMode & FadeWidthAlongLine);
-		}
-
-		fadeWidth = saturate(fadeWidth);
-		fadeOpacity = saturate(fadeOpacity);
+	float4 LinearToSrgb(float4 color) {
+		// Approximation http://chilliant.blogspot.com/2012/08/srgb-approximations-for-hlsl.html
+		float3 linearColor = color.rgb;
+		float3 S1 = sqrt(linearColor);
+		float3 S2 = sqrt(S1);
+		float3 S3 = sqrt(S2);
+		color.rgb = 0.662002687 * S1 + 0.684122060 * S2 - 0.323583601 * S3 - 0.0225411470 * linearColor;
+		return color;
 	}
 
     v2g vert (appdata_full v) {
@@ -173,7 +153,7 @@ Shader "AnimVR/FuzzyLine" {
 		PerFrameDataS frame = PerFrameData[data.FrameDataIndex];
 
         o.vertex = v.vertex;
-        o.color = v.color * data.LineColor;
+		o.color = v.color *data.LineColor;
 
 		o.color.a *= frame.Opacity;
 
@@ -197,18 +177,10 @@ Shader "AnimVR/FuzzyLine" {
 
 		// Not drawing a line
 		if (data.EndTaperFactor > 0.99) {
-			float fadeInOpacity = 1;
-			float fadeInWidth = 1;
-
-			float fadeOutOpacity = 1;
-			float fadeOutWidth = 1;
-
+			
 			float alongLine = (o.uv.y / data.LineLength);
-			ApplyFade(frame.FadeIn, frame.FadeModeIn, alongLine, o.dataIndex, fadeInOpacity, fadeInWidth);
-			ApplyFade(frame.FadeOut, frame.FadeModeOut, 1.0f - alongLine, o.dataIndex, fadeOutOpacity, fadeOutWidth);
-
-			float fadeOpacity = fadeInOpacity * fadeOutOpacity;
-			float fadeWidth = fadeInWidth * fadeOutWidth;
+			float fadeOpacity, fadeWidth;
+			ComputeFadeValues(alongLine, frame.FadeIn, frame.FadeModeIn, frame.FadeOut, frame.FadeModeOut, o.dataIndex, fadeOpacity, fadeWidth);
 
 			o.color.a *= fadeOpacity;
 
@@ -221,7 +193,7 @@ Shader "AnimVR/FuzzyLine" {
 			o.color.rgb = ApplyLut2D(frame.ColorLookupTexture, saturate(o.color.rgb));
 		}
 
-
+		o.color = SrgbToLinear(o.color);
 
         return o;
     }
@@ -405,7 +377,7 @@ Shader "AnimVR/FuzzyLine" {
         float3 worldSpaceForward = normalize( mul(transpose(unity_WorldToObject), float4(forward, 0)));
         float3 viewDir = normalize(WorldSpaceViewDir(v.vertex));
 
-        g2f o;
+		g2f o;
         o.dataIndex = v.dataIndex;
         o.color = v.color;
         o.color.a *= abs(dot(worldSpaceForward, -viewDir));
@@ -417,6 +389,7 @@ Shader "AnimVR/FuzzyLine" {
         o.objPos = v.vertex.xyz;
         o.pos = UnityObjectToClipPos(v.vertex);
 		o.screenPos = ComputeScreenPos(o.pos);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         v.vertex.xyz += right; 
@@ -424,6 +397,7 @@ Shader "AnimVR/FuzzyLine" {
         o.pos = UnityObjectToClipPos(v.vertex);
 		o.screenPos = ComputeScreenPos(o.pos);
 		o.splatUv = float2(uvx+uvsize, uvy);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         v.vertex.xyz += -right - up; 
@@ -431,6 +405,7 @@ Shader "AnimVR/FuzzyLine" {
         o.pos = UnityObjectToClipPos(v.vertex);
 		o.screenPos = ComputeScreenPos(o.pos);
 		o.splatUv = float2(uvx, uvy+uvsize);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         v.vertex.xyz += right; 
@@ -438,6 +413,7 @@ Shader "AnimVR/FuzzyLine" {
         o.pos = UnityObjectToClipPos(v.vertex);
 		o.screenPos = ComputeScreenPos(o.pos);
 		o.splatUv = float2(uvx+uvsize, uvy+uvsize);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         tristream.RestartStrip();
@@ -655,10 +631,12 @@ Shader "AnimVR/FuzzyLine" {
         
         o.pos = v0.vertex - vnorm0 * v0.vertex.w;
 		o.screenPos = ComputeScreenPos(o.pos);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         o.pos = v0.vertex + vnorm0 * v0.vertex.w;
 		o.screenPos = ComputeScreenPos(o.pos);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         o.color = v1.color;
@@ -668,10 +646,12 @@ Shader "AnimVR/FuzzyLine" {
 
         o.pos = v1.vertex - vnorm1 * v1.vertex.w;
 		o.screenPos = ComputeScreenPos(o.pos);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
 
         o.pos = v1.vertex + vnorm1 * v1.vertex.w;
 		o.screenPos = ComputeScreenPos(o.pos);
+		TRANSFER_SHADOW(o)
         tristream.Append(o);
     }
 
@@ -697,6 +677,7 @@ Shader "AnimVR/FuzzyLine" {
         float grayscale = 0.3 * val.r + 0.59 * val.g + 0.11 * val.b;
         return lerp(val, grayscale, fac);
     }
+
 
     float4 frag(g2f i) : SV_Target {
 
@@ -737,7 +718,7 @@ Shader "AnimVR/FuzzyLine" {
         }
 
 
-        float4 c = texSample * float4(pow( vertColor.rgb, 2.2), vertColor.a) * _Color;
+        float4 c = texSample * vertColor * _Color;
 
         if(data.BrushType == 2) c *= tex2D (_SplatTex, i.splatUv);
 
@@ -800,6 +781,7 @@ Shader "AnimVR/FuzzyLine" {
 			AlphaToMask On
                 
             CGPROGRAM
+			#pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
             #pragma target 5.0
             #pragma vertex vert
             #pragma hull hull
@@ -816,9 +798,10 @@ Shader "AnimVR/FuzzyLine" {
 			AlphaToMask On
             Fog { Mode Off }
             ZWrite On ZTest Less Cull Off
-            Offset 1, 1
+            Offset 1, 3
                    
             CGPROGRAM
+			#pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
             #pragma multi_compile_shadowcaster
             #pragma fragmentoption ARB_precision_hint_fastest
             #pragma target 5.0
@@ -830,7 +813,11 @@ Shader "AnimVR/FuzzyLine" {
             
             float4 frag_shadow( g2f i ) : COLOR
             {
-                return 1;
+				CoverageFragmentInfo f;
+				TRANSFER_COVERAGE_DATA_FRAG(i, f);
+				f.id = i.dataIndex;
+				float4 col = ApplyCoverage(i.color, f);
+				return float4(1, 1, 1, col.a);
             }
             ENDCG
         }

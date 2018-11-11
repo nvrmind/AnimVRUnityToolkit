@@ -156,7 +156,7 @@ public class TubeRenderer : MonoBehaviour
 
     public float currentTotalLength = 0;
 
-    public Transform frame;
+    public AnimFrame frame;
 
     public Vector2 ExtendsMultiplier
     {

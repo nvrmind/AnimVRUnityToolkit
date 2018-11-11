@@ -1,6 +1,8 @@
-﻿using System;
+﻿using AnimVR;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Animations;
 using UnityEngine.Playables;
 using UnityEngine.Timeline;
 
@@ -12,6 +14,7 @@ namespace ANIMVR
 
         public float FPS = 1;
         public List<int> FrameIndices = new List<int>();
+        public FrameFadeMode FadeIn, FadeOut;
 
         public ClipCaps clipCaps { get { return ClipCaps.All;  } }
 
@@ -23,6 +26,8 @@ namespace ANIMVR
             behaviour.Parent = parent;
             behaviour.FPS = FPS;
             behaviour.FrameIndices = FrameIndices;
+            behaviour.FadeIn = FadeIn;
+            behaviour.FadeOut = FadeOut;
             return playable;
         }
 
@@ -45,11 +50,7 @@ namespace ANIMVR
         {
             get
             {
-                var binding = new PlayableBinding();
-                binding.streamType = DataStreamType.None;
-                binding.sourceObject = this;
-                binding.streamName = this.name + " Parent";
-                binding.sourceBindingType = typeof(GameObject);
+                var binding = AnimationPlayableBinding.Create(this.name + " Parent", this);
                 return new PlayableBinding[] { binding };
             }
         }

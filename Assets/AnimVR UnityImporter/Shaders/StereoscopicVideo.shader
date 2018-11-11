@@ -6,6 +6,7 @@ Shader "AnimVR/Video"
 		_Color("Diffuse Color", Color) = (1, 1, 1, 1)
 		_Gamma("Gamma", Float) = 2.2
 		[Enum(None, 0, Side by Side, 1, Over Under, 2)] _Layout("3D Layout", Float) = 0
+		[Enum(Always, 6, LEqual, 2)] _ZTest("Z Read", Int) = 2
 	}
 	
 	SubShader
@@ -29,9 +30,10 @@ Shader "AnimVR/Video"
 	struct v2f
 	{
 		COVERAGE_DATA
-			float2 uv : TEXCOORD0;
+		float2 uv : TEXCOORD0;
 		UNITY_VERTEX_INPUT_INSTANCE_ID
-			float4 layout3DScaleAndOffset : TEXCOORD2;
+		float4 layout3DScaleAndOffset : TEXCOORD2;
+		float4 inverseLayout3DScaleAndOffset : TEXCOORD3;
 		UNITY_VERTEX_OUTPUT_STEREO
 	};
 
@@ -46,12 +48,18 @@ Shader "AnimVR/Video"
 		o.uv = v.texcoord.xy;
 
 		// Calculate constant scale and offset for 3D layouts
-		if (_Layout == 0) // No 3D layout
-			o.layout3DScaleAndOffset = float4(0, 0, 1, 1);
-		else if (_Layout == 1) // Side-by-Side 3D layout
-			o.layout3DScaleAndOffset = float4(unity_StereoEyeIndex, 0, 0.5, 1);
-		else // Over-Under 3D layout
-			o.layout3DScaleAndOffset = float4(0, 1 - unity_StereoEyeIndex, 1, 0.5);
+		if (_Layout == 0) { // No 3D layout
+			o.layout3DScaleAndOffset =			float4(0, 0, 1, 1);
+			o.inverseLayout3DScaleAndOffset =	float4(0, 0, 1, 1);
+		}
+		else if (_Layout == 1) { // Side-by-Side 3D layout
+			o.layout3DScaleAndOffset =			float4(unity_StereoEyeIndex,       0, 0.5, 1);
+			o.inverseLayout3DScaleAndOffset =	float4(1.0 - unity_StereoEyeIndex, 0, 0.5, 1);
+		}
+		else { // Over-Under 3D layout
+			o.layout3DScaleAndOffset =			float4(0, 1 - unity_StereoEyeIndex, 1, 0.5);
+			o.inverseLayout3DScaleAndOffset =	float4(0, unity_StereoEyeIndex,     1, 0.5);
+		}
 
 		return o;
 	}
@@ -63,6 +71,7 @@ Shader "AnimVR/Video"
 		Cull Off
 		ZWrite On
 		AlphaToMask On
+		ZTest [_ZTest]
 
 		CGPROGRAM
 #pragma vertex vert
@@ -78,14 +87,20 @@ Shader "AnimVR/Video"
 			float2 tc = i.uv;
 			tc = (tc + i.layout3DScaleAndOffset.xy) * i.layout3DScaleAndOffset.zw;
 
+			float4 texColor = tex2D(_MainTex, tc);
+
+#if !UNITY_SINGLE_PASS_STEREO
+			tc = i.uv;
+			tc = (tc + i.inverseLayout3DScaleAndOffset.xy) * i.inverseLayout3DScaleAndOffset.zw;
+			texColor = texColor * float4(1, 0, 0, 0.5) + tex2D(_MainTex, tc) * float4(0, 1, 1, 0.5);
+#endif
+
 			fixed4 col = _Color;
-			col *= tex2D(_MainTex, tc);
+			col *= texColor;
 
 			col.rgb = pow(col.rgb, 1.0/_Gamma);
 
 			col = saturate(col);
-
-			col.a = 1;
 
 			CoverageFragmentInfo f;
 			TRANSFER_COVERAGE_DATA_FRAG(i, f);

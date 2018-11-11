@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public static class MeshUtils
-{
+public static class MeshUtils {
     #region Simplification
     private const float CURVATURE_TOLERANCE = 0.1f;
     private const float DISTANCE_TOLERANCE_FACTOR = 1.5f;
@@ -13,92 +12,82 @@ public static class MeshUtils
 
     static float CURR_CURVATURE_TOLERANCE, CURR_DISTANCE_TOLERANCE_FACTOR, CURR_COLOR_TOLERANCE, CURR_LIGHT_TOLERANCE;
 
-    public static float Distance(Color a, Color b)
-    {
+    public static float Distance(Color a, Color b) {
         float rDiff = a.r - b.r;
         float gDiff = a.g - b.g;
         float bDiff = a.b - b.b;
         float aDiff = a.a - b.a;
         return Mathf.Sqrt(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff + aDiff * aDiff);
     }
-    
-    public static void SimplifyStage(StageData stage, float factor = 1)
-    {
+
+    public static void SimplifyStage(StageData stage, float factor = 1) {
         float f;
         SimplifyStage(stage, factor, out f);
     }
 
-    public static void SimplifyStage(StageData stage, float factor, out float reduceFactor)
-    {
+    public static void SimplifyStage(StageData stage, float factor, out float reduceFactor) {
         CURR_CURVATURE_TOLERANCE = CURVATURE_TOLERANCE * factor;
         CURR_DISTANCE_TOLERANCE_FACTOR = DISTANCE_TOLERANCE_FACTOR * factor;
         CURR_COLOR_TOLERANCE = COLOR_TOLERANCE * factor;
         CURR_LIGHT_TOLERANCE = LIGHT_TOLERANCE * factor;
 
         int prevCount = 0, newCount = 0;
-        foreach (var symbol in stage.Symbols)
-        {
+        foreach (var symbol in stage.Symbols) {
             SimplifyPlayable(symbol, ref prevCount, ref newCount);
         }
 
-        reduceFactor = ((float) newCount) / prevCount;
+        reduceFactor = ((float)newCount) / prevCount;
     }
-    
-    
-    public static void SimplifyPlayable(PlayableData playable, ref int prevCount, ref int newCount)
-    {
+
+
+    public static void SimplifyPlayable(PlayableData playable, ref int prevCount, ref int newCount) {
         if (playable is SymbolData) SimplifyPlayable(playable as SymbolData, ref prevCount, ref newCount);
         else if (playable is TimeLineData) SimplifyPlayable(playable as TimeLineData, ref prevCount, ref newCount);
     }
-    
-    public static void SimplifyPlayable(SymbolData playable, ref int prevCount, ref int newCount)
-    {
-        foreach (var p in playable.Playables)
-        {
+
+    public static void SimplifyPlayable(SymbolData playable, ref int prevCount, ref int newCount) {
+        foreach (var p in playable.Playables) {
             SimplifyPlayable(p, ref prevCount, ref newCount);
         }
     }
 
-    public static void SimplifyPlayable(TimeLineData playable, ref int prevCount, ref int newCount)
-    {
-        foreach (var frame in playable.Frames)
-        {
-            if(frame.isInstance) continue;
+    public static void SimplifyPlayable(TimeLineData playable, ref int prevCount, ref int newCount) {
+        foreach (var frame in playable.Frames) {
+            if (frame.isInstance) continue;
 
-            foreach (var line in frame.Lines)
-            {
+            foreach (var line in frame.RuntimeLines) {
                 SimplifyLineData(line, ref prevCount, ref newCount);
             }
         }
     }
-    
-    
-    public static void SimplifyLineData(LineData line, ref int prevCount, ref int newCount)
-    {
+
+
+    public static void SimplifyLineData(LineData line, ref int prevCount, ref int newCount) {
         prevCount += line.Points.Count;
-        if (line.Points.Count < 3) return;
+        if (line.Points.Count < 5) return;
 
         List<int> pointsToKeep = new List<int>();
-        
-        Vector3 prevDir = (line.Points[1].V3 - line.Points[0].V3).normalized;
-        Color prevColor = line.colors[0];
-        float prevLight = line.light[0];
-        
+
+        Vector3 prevDir = (line.Points[2].V3 - line.Points[1].V3).normalized;
+        Color prevColor = line.colors[1];
+        float prevLight = line.light[1];
+
         pointsToKeep.Add(0);
-        
+        pointsToKeep.Add(1);
+
         double curveCos = Mathf.Cos(CURR_CURVATURE_TOLERANCE);
 
-        for (int i = 1; i < line.Points.Count-1; i++) {
+        for (int i = 2; i < line.Points.Count - 2; i++) {
 
             var curr = line.Points[i].V3;
 
             int nextIndex = (i + 1);
             var next = line.Points[nextIndex].V3;
-		
+
             Vector3 dir = next - curr;
             float length = dir.magnitude;
 
-            Vector3 norm = dir * 1.0f/length;
+            Vector3 norm = dir * 1.0f / length;
 
             bool outsideLengthTolerance = length > line.widths[i] * CURR_DISTANCE_TOLERANCE_FACTOR;
             bool outsideCurvatureTolerance = Vector3.Dot(norm, prevDir) < curveCos;
@@ -109,7 +98,7 @@ public static class MeshUtils
             bool outsideColorTolerance = Distance(currCol, prevColor) > CURR_COLOR_TOLERANCE;
 
             bool outsideLightTolerance = Mathf.Abs(currLight - prevLight) > CURR_LIGHT_TOLERANCE;
-            
+
             if (length < 0.0000001f || outsideCurvatureTolerance || outsideLengthTolerance || outsideColorTolerance || outsideLightTolerance) {
                 pointsToKeep.Add(i);
                 prevDir = norm;
@@ -117,8 +106,9 @@ public static class MeshUtils
                 prevLight = currLight;
             }
         }
-        
-        pointsToKeep.Add(line.Points.Count-1);
+
+        pointsToKeep.Add(line.Points.Count - 2);
+        pointsToKeep.Add(line.Points.Count - 1);
 
         newCount += pointsToKeep.Count;
 
@@ -128,8 +118,7 @@ public static class MeshUtils
         List<SerializableColor> colors = new List<SerializableColor>(pointsToKeep.Count);
         List<float> light = new List<float>(pointsToKeep.Count);
 
-        for (int i = 0; i < pointsToKeep.Count; i++)
-        {
+        for (int i = 0; i < pointsToKeep.Count; i++) {
             int id = pointsToKeep[i];
             widths.Add(line.widths[id]);
             points.Add(line.Points[id]);
@@ -143,14 +132,13 @@ public static class MeshUtils
         line.rotations = rotations;
         line.colors = colors;
         line.light = light;
-        
+
     }
     #endregion
 
     #region Geometry Generation
 
-    private struct Vertex
-    {
+    private struct Vertex {
         public Vector3 vertex;
         public Vector4 tangent;
         public Vector3 normal;
@@ -158,8 +146,7 @@ public static class MeshUtils
         public Color color;
     }
 
-    private struct v2g
-    {
+    private struct v2g {
         public Vector3 vertex;
         public Vector3 tangent;
         public Vector3 bitangent;
@@ -168,14 +155,13 @@ public static class MeshUtils
         public Color color;
     }
 
-    struct g2f
-    {
+    struct g2f {
         public Color color;
         public Vector2 uv;
         public Vector2 splatUv;
         public Vector3 objPos;
         public Vector3 objNorm;
-	};
+    };
 
     static float _TaperDistStart = 0.1f;
     static float _TaperDistEnd = 0.1f;
@@ -188,14 +174,12 @@ public static class MeshUtils
     static float _TaperAmountOpacity;
     //static float _ConstantSize;
 
-    public static void GeneratePositionData(LineData data, List<Vector3> positions, List<int> indices, List<Vector4> colors)
-    {
+    public static void GeneratePositionData(LineData data, List<Vector3> positions, List<int> indices, List<Vector4> colors, List<Vector2> uvs, List<Vector3> normals = null) {
         if (data.Points.Count < 2) return;
 
         List<TubeRenderer.TubeVertex> tubeVertices = new List<TubeRenderer.TubeVertex>(data.Points.Count);
 
-        for (int i = 0; i < data.Points.Count; i++)
-        {
+        for (int i = 0; i < data.Points.Count; i++) {
             TubeRenderer.AddPoint(data.Points[i].V3, data.rotations[i].Q, data.widths[i], data.colors[i].C, data.light[i], tubeVertices);
         }
 
@@ -220,10 +204,8 @@ public static class MeshUtils
 
         List<g2f> tristream = new List<g2f>(meshIndices.Length * 3);
 
-        for (int l = 0; l < 1; l++)
-        {
-            for (int i = 0; i < meshIndices.Length / 2; i++)
-            {
+        for (int l = 0; l < 1; l++) {
+            for (int i = 0; i < meshIndices.Length / 2; i++) {
                 int i1 = meshIndices[i * 2 + 0];
                 int i2 = meshIndices[i * 2 + 1];
 
@@ -241,8 +223,7 @@ public static class MeshUtils
                 v1, domain(op, new Vector2(0, l/_LineCount), _LineCount)
                 };
 
-                for (int u = 1; u <= 2; u++)
-                {
+                for (int u = 1; u <= 2; u++) {
                     IN[0] = IN[1];
                     IN[1] = domain(op, new Vector2(((float)u) / 2, l / _LineCount), _LineCount);
                     geom(IN, tristream);
@@ -251,8 +232,7 @@ public static class MeshUtils
 
 
 
-            if (tristream.Count < 3)
-            {
+            if (tristream.Count < 3) {
                 continue;
             }
 
@@ -264,24 +244,24 @@ public static class MeshUtils
             data.transform.ApplyTo(ref pos);
             positions.Add(pos);
             colors.Add(tristream[0].color);
+            uvs.Add(tristream[0].uv);
+            if (normals != null) normals.Add(tristream[0].objNorm);
 
             pos = tristream[1].objPos;
             data.transform.ApplyTo(ref pos);
             positions.Add(pos);
             colors.Add(tristream[1].color);
+            uvs.Add(tristream[1].uv);
+            if (normals != null) normals.Add(tristream[1].objNorm);
 
             bool flip = _BrushType != 0;
 
-            for (int i = 2; i < tristream.Count; i++)
-            {
-                if (flip)
-                {
+            for (int i = 2; i < tristream.Count; i++) {
+                if (flip) {
                     indices.Add(strip2);
                     indices.Add(strip1);
                     indices.Add(strip0);
-                }
-                else
-                {
+                } else {
                     indices.Add(strip0);
                     indices.Add(strip1);
                     indices.Add(strip2);
@@ -299,79 +279,22 @@ public static class MeshUtils
 
                 positions.Add(pos);
                 colors.Add(tristream[i].color);
+                uvs.Add(tristream[i].uv);
+                if (normals != null) normals.Add(tristream[i].objNorm);
             }
         }
     }
 
     private static float length(Vector3 v) { return v.magnitude; }
     private static Vector3 normalize(Vector3 v) { return v.normalized; }
-    private static Vector3 cross(Vector3 a, Vector3 b) { return Vector3.Cross(a,b); }
+    private static Vector3 cross(Vector3 a, Vector3 b) { return Vector3.Cross(a, b); }
     private static float frac(float v) { return v - (int)v; }
 
-    private static float rand(Vector2 v)
-    {
-        return  frac(Mathf.Sin(Vector2.Dot(v, new Vector2(12.9898f, 78.233f))) * 43758.5453f);
+    private static float rand(Vector2 v) {
+        return frac(Mathf.Sin(Vector2.Dot(v, new Vector2(12.9898f, 78.233f))) * 43758.5453f);
     }
 
-    private static void emitSplat(v2g[] IN, List<g2f> tristream)
-    {
-        v2g v = IN[0];
-
-        float xScale = length(v.bitangent);
-        float yScale = length(v.normal);
-
-        Vector2 vxy = new Vector2(v.vertex.x, v.vertex.y);
-        Vector2 vxz = new Vector2(v.vertex.x, v.vertex.z);
-        Vector2 vzy = new Vector2(v.vertex.z, v.vertex.y);
-
-        float scale = (0.75f + rand(vxy + Vector2.one*0.75f) * 0.5f) * (xScale + yScale) * 2;
-
-        Vector3 right = normalize(new Vector3(rand(vxy + Vector2.one * 0.4f), rand(vxy + Vector2.one * 0.13f), rand(vxy + Vector2.one * 0.8f)) - Vector3.one * 0.5f);
-        Vector3 up = normalize(new Vector3(rand(vxy + Vector2.one * 0.12f), rand(vxy + Vector2.one * 0.124f), rand(vxy + Vector2.one * 0.5807f)) - Vector3.one*0.5f);
-
-        Vector3 forward = cross(right, up);
-
-        right = cross(up, forward);
-
-        right *= scale;
-        up *= scale;
-
-        float uvx = 0; //rand(vxy+0.124124) < 0.5 ? 0.0 : 0.5;
-        float uvy = 0; //rand(vxy+0.456345) < 0.5 ? 0.0 : 0.5;
-
-        float uvsize = 1;
-
-        v.vertex += (new Vector3(rand(vxy + Vector2.one*0.1f), rand(vxz + Vector2.one * 4), rand(vzy + Vector2.one * 1)) * 2 - Vector3.one * 1) * (xScale + yScale) * 0.5f;
-
-        g2f o;
-        o.color = v.color;
-        o.uv = v.uv;
-        o.objNorm = forward;
-
-        v.vertex += -right * 0.5f + up * 0.5f;
-        o.splatUv = new Vector2(uvx, uvy);
-        o.objPos = v.vertex;
-        tristream.Add(o);
-
-        v.vertex += right;
-        o.objPos = v.vertex;
-        o.splatUv = new Vector2(uvx + uvsize, uvy);
-        tristream.Add(o);
-
-        v.vertex += -right - up;
-        o.objPos = v.vertex;
-        o.splatUv = new Vector2(uvx, uvy + uvsize);
-        tristream.Add(o);
-
-        v.vertex += right;
-        o.objPos = v.vertex;
-        o.splatUv = new Vector2(uvx + uvsize, uvy + uvsize);
-        tristream.Add(o);
-    }
-
-
-    private static void emitCube(v2g[] IN, List<g2f> tristream)
-    {
+    private static void emitCube(v2g[] IN, List<g2f> tristream) {
         Vector3 startPos = IN[0].vertex;
         Vector3 rightStart = IN[0].bitangent;
         Vector3 upStart = IN[0].normal;
@@ -395,8 +318,7 @@ public static class MeshUtils
 
         v2g v = IN[0];
 
-        for (int i = 0; i <= 4; i++)
-        {
+        for (int i = 0; i <= 4; i++) {
             int index = i == 4 ? 0 : i;
 
             {
@@ -425,8 +347,7 @@ public static class MeshUtils
         }
     }
 
-    private static void emitSphere(v2g[] IN, List<g2f> tristream)
-    {
+    private static void emitSphere(v2g[] IN, List<g2f> tristream) {
         Vector3 startPos = IN[0].vertex;
         Vector3 rightStart = IN[0].bitangent;
         Vector3 upStart = IN[0].normal;
@@ -459,8 +380,7 @@ public static class MeshUtils
 
         v2g v = IN[0];
 
-        for (int i = 0; i <= 8; i++)
-        {
+        for (int i = 0; i <= 8; i++) {
             int index = i == 8 ? 0 : i;
 
             {
@@ -468,7 +388,7 @@ public static class MeshUtils
                 o.splatUv = Vector2.zero;
                 o.color = IN[1].color;
                 o.uv = IN[1].uv;
-                o.uv.y = index * 0.2f;
+                o.uv.y = index * 0.125f;
                 v.vertex = endVerts[index];
                 o.objNorm = v.vertex - endPos;
                 o.objPos = v.vertex;
@@ -480,7 +400,7 @@ public static class MeshUtils
                 o.splatUv = Vector2.zero;
                 o.color = IN[0].color;
                 o.uv = IN[0].uv;
-                o.uv.y = index * 0.2f;
+                o.uv.y = index * 0.125f;
                 v.vertex = startVerts[index];
                 o.objNorm = v.vertex - startPos;
                 o.objPos = v.vertex;
@@ -489,43 +409,33 @@ public static class MeshUtils
         }
     }
 
-    private static void geom(v2g[] IN, List<g2f> tristream)
-    {
-        if (_BrushType == 0)
-        {
+    private static void geom(v2g[] IN, List<g2f> tristream) {
+        if (_BrushType == 0) {
             emitSphere(IN, tristream);
-        }
-        else if (_BrushType == 1)
-        {
+        } else if (_BrushType == 1) {
             emitCube(IN, tristream);
         }
-        else if (_BrushType == 2)
-        {
-            emitSplat(IN, tristream);
-        }
-        /*else if (_BrushType == 3)
-        {
-            emitLine(IN, tristream);
-        }*/
-        else
-        {
+          /*else if (_BrushType == 3)
+          {
+              emitLine(IN, tristream);
+          }*/
+          else {
             emitCube(IN, tristream);
         }
     }
 
-    private static Vector3 normalizeOrZero(Vector3 val)
-    {
+    private static Vector3 normalizeOrZero(Vector3 val) {
         float len = val.magnitude;
         if (len < 0.00001) return Vector3.zero;
         return val / len;
     }
 
-    private static v2g vert(Vertex v)
-    {
+    private static v2g vert(Vertex v) {
         v2g o = new v2g();
         o.vertex = v.vertex;
         o.color = v.color;
         o.uv = v.uv;
+        o.uv.x = o.uv.y / _LineLength;
 
         float lineWidthScale = 1; // lerp(1, 1.0 / mul(float4(1, 0, 0, 0), unity_ObjectToWorld).x, _ConstantSize);
 
@@ -536,20 +446,17 @@ public static class MeshUtils
         return o;
     }
 
-    public static float smoothstep(float edge0, float edge1, float x)
-    {
+    public static float smoothstep(float edge0, float edge1, float x) {
         float t = Mathf.Clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
         if (float.IsNaN(t)) t = 0;
         return t * t * (3.0f - 2.0f * t);
     }
 
-    private static v2g domain(v2g[] op, Vector2 uv, float _LineCount)
-    {
+    private static v2g domain(v2g[] op, Vector2 uv, float _LineCount) {
         Vector3 opPos0 = op[0].vertex;
         Vector3 opPos1 = op[1].vertex;
         float scaleFactor = 1;
-        if (_LineCount >= 2)
-        {
+        if (_LineCount >= 2) {
             float firstDistFromStart = op[0].uv.y;
             Vector3 offsetStart = op[0].bitangent * Noise.Generate(firstDistFromStart * 20, uv.y * 10) + op[0].normal * Noise.Generate(firstDistFromStart * 20 + 200, uv.y * 10 + 200);
             offsetStart = offsetStart * (uv.y * uv.y + 0.5f);
@@ -577,11 +484,11 @@ public static class MeshUtils
 
 
         output.vertex = position;
-        output.normal =     Vector3.Lerp(op[0].normal, op[1].normal, t) * scaleFactor;
-        output.tangent =    Vector3.Lerp(op[0].tangent, op[1].tangent, t);
-        output.bitangent =  Vector3.Lerp(op[0].bitangent, op[1].bitangent, t) * scaleFactor;
-        output.color =      Color.Lerp(op[0].color, op[1].color, t);
-        output.uv =         Vector3.Lerp(op[0].uv, op[1].uv, t);
+        output.normal = Vector3.Lerp(op[0].normal, op[1].normal, t) * scaleFactor;
+        output.tangent = Vector3.Lerp(op[0].tangent, op[1].tangent, t);
+        output.bitangent = Vector3.Lerp(op[0].bitangent, op[1].bitangent, t) * scaleFactor;
+        output.color = Color.Lerp(op[0].color, op[1].color, t);
+        output.uv = Vector3.Lerp(op[0].uv, op[1].uv, t);
 
 
         float distanceFromStart = output.uv.y;
@@ -601,41 +508,35 @@ public static class MeshUtils
 
         return output;
     }
-#endregion
+    #endregion
 
-    public static Mesh MeshFromData(MeshData data)
-    {
+    public static Mesh MeshFromData(MeshData data) {
         var mesh = new Mesh();
         mesh.vertices = data.vertices.Select((v) => v.V3).ToArray();
 
-        if (data.normals != null)
-        {
+        if (data.normals != null) {
             mesh.normals = data.normals.Select((v) => v.V3).ToArray();
         }
 
-        if (data.uvs != null && data.uvs.Length == mesh.vertices.Length)
-        {
+        if (data.uvs != null && data.uvs.Length == mesh.vertices.Length) {
             mesh.uv = data.uvs.Select((v) => v.V2).ToArray();
         }
 
-        if (data.colors != null && data.colors.Length == mesh.vertices.Length)
-        {
+        if (data.colors != null && data.colors.Length == mesh.vertices.Length) {
             mesh.colors = data.colors.Select((v) => v.C).ToArray();
         }
 
         mesh.triangles = data.triangles;
         mesh.RecalculateBounds();
 
-        if (data.normals == null)
-        {
+        if (data.normals == null) {
             mesh.RecalculateNormals();
         }
 
         return mesh;
     }
 
-    public static Material MaterialFromData(MaterialData data, Material baseMat)
-    {
+    public static Material MaterialFromData(MaterialData data, Material baseMat) {
         Material mat = new Material(baseMat);
 
         mat.SetColor("_Color", data.Diffuse.C);
@@ -645,8 +546,7 @@ public static class MeshUtils
         mat.SetColor("_TintColor", Color.white);
         mat.SetFloat("_Gamma", data.ColorSpace == ColorSpace.Linear ? 1 : 2.2f);
 
-        if (data.DiffuseTex != null)
-        {
+        if (data.DiffuseTex != null) {
             Texture2D diffuseTex = new Texture2D(1, 1);
             diffuseTex.LoadImage(data.DiffuseTex);
             diffuseTex.Apply();

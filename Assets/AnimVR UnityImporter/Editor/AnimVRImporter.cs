@@ -12,52 +12,68 @@ using System;
 /// - Setup audio sources
 /// - Camera FOV
 /// 
-namespace ANIMVR
-{
-    public enum AudioImportSetting
-    {
+namespace ANIMVR {
+    public enum AudioImportSetting {
         None,
         ClipsOnly,
         ClipsAndTracks
     }
 
     [Serializable]
-    public struct AnimVRImporterSettings
-    {
+    public struct AnimVRImporterSettings {
         public bool ApplyStageTransform;
         public DirectorWrapMode DefaultWrapMode;
         public AudioImportSetting AudioImport;
         public bool ImportCameras;
         public bool UnlitByDefault;
         public string Shader;
+        public float SimplifyFactor;
+    }
+
+    [Serializable]
+    public struct SerializableIdentifier {
+        public string name;
+        public string type;
+        public string assembly;
+
+        public SerializableIdentifier(UnityEngine.Object asset) {
+            if (asset == null) {
+                throw new ArgumentNullException("asset");
+            }
+            type = asset.GetType().Name;
+            name = asset.name;
+            assembly = asset.GetType().Assembly.GetName().Name;
+        }
     }
 
     [ScriptedImporter(1, "stage")]
-    public class AnimVRImporter : ScriptedImporter
-    {
-        public AnimVRImporterSettings Settings = new AnimVRImporterSettings()
-        {
+    public class AnimVRImporter : ScriptedImporter {
+        public AnimVRImporterSettings Settings = new AnimVRImporterSettings() {
             ApplyStageTransform = false,
             DefaultWrapMode = DirectorWrapMode.None,
-            AudioImport = AudioImportSetting.ClipsOnly,
+            AudioImport = AudioImportSetting.ClipsAndTracks,
             ImportCameras = true,
             UnlitByDefault = true,
-            Shader = "AnimVR/Standard"
+            Shader = "AnimVR/ImportedLine",
+            SimplifyFactor = 1.0f
         };
+
+
+        public List<SerializableIdentifier> m_Materials = new List<SerializableIdentifier>();
 
         public bool needsAudioReimport;
 
         public Texture2D PreviewTexture;
         public string InfoString;
         public bool HasFades;
-          
+
 
         [NonSerialized]
         StageData stage;
 
         Dictionary<AudioDataPool.AudioPoolKey, AudioClip> savedClips;
 
-        Material materialToUse;
+        Material baseMaterial;
 
         int totalVertices;
         int totalLines;
@@ -77,43 +93,45 @@ namespace ANIMVR
             {AnimVR.TrimLoopType.Infinity, TimelineClip.ClipExtrapolation.Continue }
         };
 
-        public override void OnImportAsset(AssetImportContext ctx)
-        {
+        public override void OnImportAsset(AssetImportContext ctx) {
             stage = AnimData.LoadFromFile(ctx.assetPath);
-            if(stage == null)
-            {
+            if (stage == null) {
                 return;
             }
-            
-            MeshUtils.SimplifyStage(stage);
+
+            MeshUtils.SimplifyStage(stage, Settings.SimplifyFactor);
 
             savedClips = new Dictionary<AudioDataPool.AudioPoolKey, AudioClip>();
             totalVertices = 0;
             totalLines = 0;
             HasFades = false;
+            m_Materials.Clear();
 
             PreviewTexture = new Texture2D(1, 1);
             PreviewTexture.LoadImage(stage.previewFrames[0], false);
             PreviewTexture.Apply();
 
-            if (Settings.Shader == null)
-            {
+            if (Settings.Shader == null || Settings.Shader == "AnimVR/Standard") {
                 Debug.Log("Resetting shader");
-                Settings.Shader = "AnimVR/Standard";
+                Settings.Shader = "AnimVR/ImportedLine";
             }
 
-            materialToUse = new Material(Shader.Find(Settings.Shader));
-            materialToUse.SetFloat("_Unlit", Settings.UnlitByDefault ? 1 : 0);
-            materialToUse.SetFloat("_Gamma", PlayerSettings.colorSpace == ColorSpace.Gamma ? 1.0f : 2.2f);
-            materialToUse.name = Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial";
+            baseMaterial = new Material(Shader.Find(Settings.Shader));
+            baseMaterial.SetFloat("_Unlit", Settings.UnlitByDefault ? 1 : 0);
+            baseMaterial.SetFloat("_Gamma", PlayerSettings.colorSpace == ColorSpace.Gamma ? 1.0f : 2.2f);
+            baseMaterial.name = Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial";
 
             needsAudioReimport = false;
 
             GenerateUnityObject(stage, ctx);
 
-            ctx.AddObjectToAsset(Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial", materialToUse);
+            var externalObjects = GetExternalObjectMap();
 
-            InfoString = "FPS: " + stage.fps + ", " + stage.timelineLength + " frames \n" 
+            ctx.AddObjectToAsset(Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial", baseMaterial);
+
+            m_Materials.Add(new SerializableIdentifier(baseMaterial));
+
+            InfoString = "FPS: " + stage.fps + ", " + stage.timelineLength + " frames \n"
                          + totalVertices + " verts, " + totalLines + " lines";
 
             savedClips = null;
@@ -121,8 +139,7 @@ namespace ANIMVR
 
         }
 
-        public struct Context
-        {
+        public struct Context {
             public Transform parentTransform, rootTransform;
             public PlayableDirector director;
             public Animator animator;
@@ -132,8 +149,7 @@ namespace ANIMVR
             public int frameOffset;
         }
 
-        public GameObject GenerateUnityObject(StageData stage, AssetImportContext ctx)
-        {
+        public GameObject GenerateUnityObject(StageData stage, AssetImportContext ctx) {
             var stageObj = new GameObject(stage.name);
 
             ctx.AddObjectToAsset(stage.name, stageObj, PreviewTexture);
@@ -151,7 +167,7 @@ namespace ANIMVR
             timelineAsset.name = stage.name + "_Timeline";
             timelineAsset.editorSettings.fps = stage.fps;
             timelineAsset.durationMode = TimelineAsset.DurationMode.FixedLength;
-            timelineAsset.fixedDuration = stage.timelineLength  * 1.0 / stage.fps;
+            timelineAsset.fixedDuration = stage.timelineLength * 1.0 / stage.fps;
 
             ctx.AddObjectToAsset(timelineAsset.name, timelineAsset);
             context.director.playableAsset = timelineAsset;
@@ -160,13 +176,11 @@ namespace ANIMVR
             context.ctx = ctx;
             context.parentTimeline = timelineAsset;
 
-            foreach(var symbol in stage.Symbols)
-            {
+            foreach (var symbol in stage.Symbols) {
                 var symbolObj = GenerateUnityObject(symbol, context);
 
                 symbolObj.transform.SetParent(stageObj.transform, false);
-                if(Settings.ApplyStageTransform)
-                {
+                if (Settings.ApplyStageTransform) {
                     symbolObj.transform.localPosition += stage.transform.pos;
                     symbolObj.transform.localRotation *= stage.transform.rot;
 
@@ -176,18 +190,17 @@ namespace ANIMVR
                 }
             }
             //hacky fix cause fixed duration from code is broken
-            timelineAsset.fixedDuration = (stage.timelineLength -1) * 1.0 / stage.fps;
-            
+            timelineAsset.fixedDuration = (stage.timelineLength - 1) * 1.0 / stage.fps;
+
             return stageObj;
         }
 
-        public GameObject GenerateUnityObject(PlayableData playable, Context ctx)
-        {
+        public GameObject GenerateUnityObject(PlayableData playable, Context ctx) {
             if (playable.FadeIn != 0 || playable.FadeOut != 0) HasFades = true;
 
             if (playable is SymbolData) return GenerateUnityObject(playable as SymbolData, ctx);
             else if (playable is TimeLineData) return GenerateUnityObject(playable as TimeLineData, ctx);
-// No audio support on Mac
+            // No audio support on Mac
 #if UNITY_EDITOR_WIN
             else if (playable is AudioData && Settings.AudioImport != AudioImportSetting.None) return GenerateUnityObject(playable as AudioData, ctx);
 #endif
@@ -196,13 +209,11 @@ namespace ANIMVR
             else return null;
         }
 
-        public GameObject MakePlayableBaseObject(PlayableData playable, ref Context ctx, float start, float duration)
-        {
+        public GameObject MakePlayableBaseObject(PlayableData playable, ref Context ctx, float start, float duration) {
             start += ctx.frameOffset / ctx.fps;
             var hackyStart = Mathf.Max(0, start);
             var clipIn = hackyStart - start;
             start = hackyStart;
-            duration -= clipIn;
 
             var playableObj = new GameObject(playable.displayName ?? "Layer");
             playableObj.transform.parent = ctx.parentTransform;
@@ -218,10 +229,14 @@ namespace ANIMVR
             var timelineAsset = TimelineAsset.CreateInstance<TimelineAsset>();
             timelineAsset.name = path + "_Timeline";
             timelineAsset.editorSettings.fps = stage.fps;
-            timelineAsset.durationMode = TimelineAsset.DurationMode.BasedOnClips;
-            timelineAsset.fixedDuration = start + duration;
+            timelineAsset.durationMode = TimelineAsset.DurationMode.FixedLength;
+            timelineAsset.fixedDuration = playable.TrimLoopOut == AnimVR.TrimLoopType.Infinity ? duration : 1000000;
 
             ctx.ctx.AddObjectToAsset(timelineAsset.name, timelineAsset);
+            director.extrapolationMode = playable.TrimLoopOut == AnimVR.TrimLoopType.OneShot ? DirectorWrapMode.None :
+                                         playable.TrimLoopOut == AnimVR.TrimLoopType.Loop    ? DirectorWrapMode.Loop :
+                                         playable.TrimLoopOut == AnimVR.TrimLoopType.Hold    ? DirectorWrapMode.Hold :
+                                                                                               DirectorWrapMode.Hold;
             director.playableAsset = timelineAsset;
 
             ctx.animator = playableObj.AddComponent<Animator>();
@@ -231,9 +246,15 @@ namespace ANIMVR
 
             var controlClip = controlTrack.CreateDefaultClip();
             controlClip.displayName = playableObj.name;
-            controlClip.start = start;
-            controlClip.duration = duration;
+            controlClip.start = start == 0 ? start : (start - 0.000001);
+            controlClip.duration = (start == 0 ? -0.000001 : 0) + duration - clipIn;
             controlClip.clipIn = clipIn;
+            controlClip.blendInCurveMode = controlClip.blendOutCurveMode = TimelineClip.BlendCurveMode.Manual;
+            controlClip.mixInCurve = AnimationCurve.Linear(0, 0, 1, 1);
+            controlClip.mixOutCurve = AnimationCurve.Linear(0, 1, 1, 0);
+            controlClip.easeInDuration = playable.TrimLoopIn == AnimVR.TrimLoopType.Infinity || playable.FadeIn < 0.01f ? 0 : playable.FadeIn / ctx.fps;
+            controlClip.easeOutDuration = playable.TrimLoopOut == AnimVR.TrimLoopType.Infinity || playable.FadeOut < 0.01f ? 0 : playable.FadeOut / ctx.fps;
+            
 
             typeof(TimelineClip).GetProperty("preExtrapolationMode").SetValue(controlClip, TRIM_LOOP_MAPPING[playable.TrimLoopIn], null);
             typeof(TimelineClip).GetProperty("postExtrapolationMode").SetValue(controlClip, TRIM_LOOP_MAPPING[playable.TrimLoopOut], null);
@@ -251,33 +272,23 @@ namespace ANIMVR
             return playableObj;
         }
 
-        public GameObject GenerateUnityObject(SymbolData symbol, Context ctx)
-        {
+        public GameObject GenerateUnityObject(SymbolData symbol, Context ctx) {
             if (symbol.Playables.Count == 0) return null;
 
-            int minPlayableStart = symbol.Playables.Min(p => p.GetLocalTrimStart(ctx.fps));
-            int frameLength = symbol.Playables.Max(p => p.GetLocalTrimEnd(ctx.fps) - minPlayableStart);
-            int frameStart = symbol.AbsoluteTimeOffset + minPlayableStart;
+            int frameStart = symbol.GetLocalTrimStart(ctx.fps);
+            int frameEnd = symbol.GetLocalTrimEnd(ctx.fps);
+            int frameLength = frameEnd - frameStart;
 
-            if(symbol.didChangeTrimLength)
-            {
-                frameStart = symbol.AbsoluteTimeOffset - symbol.TrimIn;
-                frameLength = 10 + symbol.TrimIn + symbol.TrimOut;
-            }
-
-            if(ctx.parentTransform == ctx.rootTransform)
-            {
+            if (ctx.parentTransform == ctx.rootTransform) {
                 frameStart = 0;
                 frameLength = stage.timelineLength;
             }
 
-            var symbolObj = MakePlayableBaseObject(symbol, ref ctx, frameStart/ctx.fps, frameLength/ctx.fps);
+            var symbolObj = MakePlayableBaseObject(symbol, ref ctx, frameStart / ctx.fps, frameLength / ctx.fps);
 
-            ctx.frameOffset = symbol.TrimIn;
-            foreach (var playbale in symbol.Playables)
-            {
-                if (playbale.isVisible)
-                {
+            ctx.frameOffset = symbol.AbsoluteTimeOffset - frameStart;
+            foreach (var playbale in symbol.Playables) {
+                if (playbale.isVisible) {
                     GenerateUnityObject(playbale, ctx);
                 }
             }
@@ -285,12 +296,11 @@ namespace ANIMVR
             return symbolObj;
         }
 
-        public GameObject GenerateUnityObject(TimeLineData playable, Context ctx)
-        {
+        public GameObject GenerateUnityObject(TimeLineData playable, Context ctx) {
             int startFrame = playable.AbsoluteTimeOffset - playable.TrimIn;
             int frameCount = playable.GetFrameCount(stage.fps) + playable.TrimIn + playable.TrimOut;
 
-            var playableObj = MakePlayableBaseObject(playable, ref ctx, startFrame/ctx.fps, frameCount/ctx.fps);
+            var playableObj = MakePlayableBaseObject(playable, ref ctx, startFrame / ctx.fps, frameCount / ctx.fps);
             var pathForName = AnimationUtility.CalculateTransformPath(playableObj.transform, ctx.rootTransform);
 
             // GROUP
@@ -311,29 +321,17 @@ namespace ANIMVR
             var animAsset = animationClip.asset as AnimVRFramesAsset;
             animAsset.FPS = stage.fps;
 
+            if (playable.Frames.Count > 0) {
+                animAsset.FadeIn = playable.Frames[0].FadeModeIn;
+                animAsset.FadeOut = playable.Frames[0].FadeModeOut;
+            }
+
             ctx.director.SetGenericBinding(animAsset, playableObj);
             ctx.ctx.AddObjectToAsset(pathForName + "_animAsset", animAsset);
 
-            /*
-            // ACTIVATION
-            var frameTrack = ctx.parentTimeline.CreateTrack<ActivationTrack>(groupTrack, pathForName + "_track");
-            ctx.ctx.AddObjectToAsset(pathForName + "_track", frameTrack);
-            ctx.director.SetGenericBinding(frameTrack, playableObj);
-
-            var frameClip = frameTrack.CreateDefaultClip();
-            frameClip.start = playable.LoopIn != AnimVR.LoopType.OneShot ? 0 : animationClip.start;
-            frameClip.duration = playable.LoopOut != AnimVR.LoopType.OneShot ?
-                ctx.parentTimeline.fixedDuration - frameClip.start : 
-                (animationClip.start - frameClip.start) + animationClip.duration;
-
-            ctx.ctx.AddObjectToAsset(pathForName + "_activeAsset", frameClip.asset);
-            */
-
             int frameIndex = -1;
-            foreach(var frame in playable.Frames)
-            {
-                if (!frame.isInstance)
-                {
+            foreach (var frame in playable.Frames) {
+                if (!frame.isInstance) {
                     var frameObj = GenerateUnityObject(frame, ctx, ++frameIndex);
                     if (frameIndex != 0) frameObj.SetActive(false);
                     frameObj.transform.SetAsLastSibling();
@@ -344,26 +342,20 @@ namespace ANIMVR
             return playableObj;
         }
 
-        public GameObject GenerateUnityObject(AudioData playable, Context ctx)
-        {
+        public GameObject GenerateUnityObject(AudioData playable, Context ctx) {
             AudioClip clip = null;
 
             var dir = Application.dataPath + Path.GetDirectoryName(ctx.ctx.assetPath).Substring(6);
             var clipPath = dir + "/" + Path.GetFileNameWithoutExtension(ctx.ctx.assetPath) + "_audio/" + playable.displayName + "_audio.wav";
 
-            if (savedClips.ContainsKey(playable.audioDataKey))
-            {
+            if (savedClips.ContainsKey(playable.audioDataKey)) {
                 clip = savedClips[playable.audioDataKey];
-            }
-            else
-            {
+            } else {
                 var assetPath = clipPath.Replace(Application.dataPath, "Assets");
 
-                if (!File.Exists(clipPath))
-                {
+                if (!File.Exists(clipPath)) {
                     clip = stage.AudioDataPool.RetrieveClipFromPool(playable.audioDataKey);
-                    if (clip)
-                    {
+                    if (clip) {
                         clip.name = playable.displayName + "_audio";
                         SavWav.Save(clipPath, clip);
                         AssetDatabase.ImportAsset(assetPath);
@@ -383,7 +375,9 @@ namespace ANIMVR
 
             var playableObj = MakePlayableBaseObject(playable, ref ctx, start, duration);
             var audioSource = playableObj.AddComponent<AudioSource>();
-            audioSource.spatialBlend = playable.Spatialize ? 0 : 1;
+            audioSource.spatialBlend = playable.Spatialize ? 1 : 0;
+            audioSource.spatialize = playable.Spatialize;
+            audioSource.spatializePostEffects = playable.Spatialize;
 
             var pathForName = AnimationUtility.CalculateTransformPath(playableObj.transform, ctx.rootTransform);
 
@@ -394,24 +388,23 @@ namespace ANIMVR
             ctx.ctx.AddObjectToAsset(pathForName + "_audioTrack", track);
 
             bool loop = playable.LoopType == AnimVR.LoopType.Loop;
+            audioSource.loop = loop;
+
 
             var audioTrackClip = track.CreateDefaultClip();
             audioTrackClip.displayName = playable.displayName;
             (audioTrackClip.asset as AudioPlayableAsset).clip = clip;
-            
-            typeof(AudioPlayableAsset).GetField("m_Loop", 
+
+            typeof(AudioPlayableAsset).GetField("m_Loop",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).
                 SetValue(audioTrackClip.asset, loop);
 
 
-            if(loop)
-            {
+            if (loop) {
                 audioTrackClip.start = 0;
                 audioTrackClip.duration = ctx.parentTimeline.fixedDuration;
                 audioTrackClip.clipIn = duration - start % duration;
-            }
-            else
-            {
+            } else {
                 audioTrackClip.start = playable.TrimIn / ctx.fps;
                 audioTrackClip.duration = duration;
             }
@@ -423,11 +416,9 @@ namespace ANIMVR
             return playableObj;
         }
 
-
-        public GameObject GenerateUnityObject(CameraData playable, Context ctx)
-        {
+        public GameObject GenerateUnityObject(CameraData playable, Context ctx) {
             float start = playable.AbsoluteTimeOffset - playable.TrimIn;
-            float duration = playable.RecordingTime + (playable.TrimIn + playable.TrimOut)/ctx.fps;
+            float duration = playable.RecordingTime + (playable.TrimIn + playable.TrimOut) / ctx.fps;
             var playableObj = MakePlayableBaseObject(playable, ref ctx, start / ctx.fps, duration);
 
             var transformAnchor = new GameObject("TransformAnchor");
@@ -447,8 +438,7 @@ namespace ANIMVR
             var groupTrack = ctx.parentTimeline.CreateTrack<GroupTrack>(null, playable.displayName);
             ctx.ctx.AddObjectToAsset(pathForName + "_GroupTrack", groupTrack);
 
-            if (playable.Timeline.Frames.Count > 0)
-            {
+            if (playable.Timeline.Frames.Count > 0) {
                 var animTrack = ctx.parentTimeline.CreateTrack<AnimationTrack>(groupTrack, pathForName + "_TransformTrack");
 
                 ctx.director.SetGenericBinding(animTrack, ctx.animator);
@@ -472,8 +462,7 @@ namespace ANIMVR
             return playableObj;
         }
 
-        public GameObject GenerateUnityObject(StaticMeshData playable, Context ctx)
-        {
+        public GameObject GenerateUnityObject(StaticMeshData playable, Context ctx) {
             int frameStart = playable.AbsoluteTimeOffset - playable.TrimIn;
             int frameLength = playable.GetFrameCount(ctx.fps) + playable.TrimIn + playable.TrimOut;
 
@@ -486,22 +475,20 @@ namespace ANIMVR
             List<Material> materials = new List<Material>();
 
             int matIndex = 0;
-            foreach(var matData in playable.Materials)
-            {
-                var mat = MeshUtils.MaterialFromData(matData, materialToUse);
+            foreach (var matData in playable.Materials) {
+                var mat = MeshUtils.MaterialFromData(matData, baseMaterial);
                 mat.name = pathForName + "_material" + (matIndex++).ToString();
                 ctx.ctx.AddObjectToAsset(mat.name, mat);
 
-                if (mat.mainTexture)
-                {
+                if (mat.mainTexture) {
                     ctx.ctx.AddObjectToAsset(mat.name + "_diffuse", mat.mainTexture);
                 }
                 materials.Add(mat);
+                m_Materials.Add(new SerializableIdentifier(mat));
             }
 
             int partIndex = 0;
-            foreach (var part in playable.Frames)
-            {
+            foreach (var part in playable.Frames) {
                 var partObj = new GameObject("MeshPart");
                 var mf = partObj.AddComponent<MeshFilter>();
                 var mr = partObj.AddComponent<MeshRenderer>();
@@ -523,8 +510,7 @@ namespace ANIMVR
 
             double clipDuration = 1.0 / stage.fps;
 
-            if (playable.InstanceMap.Count > 1)
-            {
+            if (playable.InstanceMap.Count > 1) {
                 var animTrack = ctx.parentTimeline.CreateTrack<AnimationTrack>(groupTrack, pathForName + "_TransformTrack");
 
                 ctx.director.SetGenericBinding(animTrack, ctx.animator);
@@ -546,9 +532,7 @@ namespace ANIMVR
                 clipDuration = timelineClip.duration;
 
                 ctx.ctx.AddObjectToAsset(pathForName + "_asset", timelineClip.asset);
-            }
-            else
-            {
+            } else {
                 playable.InstanceMap[0].ApplyTo(transformAnchor.transform);
             }
 
@@ -567,8 +551,7 @@ namespace ANIMVR
             return playableObj;
         }
 
-        public GameObject GenerateUnityObject(FrameData frame, Context ctx, int index)
-        {
+        public GameObject GenerateUnityObject(FrameData frame, Context ctx, int index) {
             var playableObj = new GameObject(index.ToString());
             playableObj.transform.parent = ctx.parentTransform;
             playableObj.transform.localPosition = frame.transform.pos.V3;
@@ -582,15 +565,15 @@ namespace ANIMVR
             List<CombineInstance> currentList = new List<CombineInstance>();
             instances.Add(currentList);
             int vCount = 0;
-            foreach(var line in frame.Lines)
-            {
-                try
-                {
+            foreach (var line in frame.RuntimeLines) {
+                try {
                     List<Vector3> verts = new List<Vector3>();
                     List<int> indices = new List<int>();
                     List<Vector4> colors = new List<Vector4>();
+                    List<Vector2> uvs = new List<Vector2>();
+                    List<Vector3> normals = new List<Vector3>();
 
-                    MeshUtils.GeneratePositionData(line, verts, indices, colors);
+                    MeshUtils.GeneratePositionData(line, verts, indices, colors, uvs, normals);
 
                     CombineInstance instance = new CombineInstance();
 
@@ -600,22 +583,20 @@ namespace ANIMVR
                     mesh.SetVertices(verts);
                     mesh.SetTriangles(indices, 0);
                     mesh.SetColors(colors.Select(c => new Color(c.x, c.y, c.z, c.w)).ToList());
+                    mesh.SetUVs(0, uvs);
+                    mesh.SetNormals(normals);
                     instance.mesh = mesh;
 
                     vCount += verts.Count;
 
-                    if (vCount > 60000)
-                    {
+                    if (vCount > 60000) {
                         currentList = new List<CombineInstance>();
                         instances.Add(currentList);
                         vCount -= 60000;
                     }
-
                     currentList.Add(instance);
                     totalLines++;
-                }
-                catch (Exception e)
-                {
+                } catch (Exception e) {
                     Debug.LogWarning(e.Message);
                 }
             }
@@ -623,9 +604,8 @@ namespace ANIMVR
             totalVertices += vCount;
 
             int meshId = 0;
-            foreach (var mesh in instances)
-            {
-                var subObj = new GameObject("Submesh" + index);
+            foreach (var mesh in instances) {
+                var subObj = new GameObject("Submesh" + meshId);
                 subObj.transform.SetParent(playableObj.transform, false);
 
                 var mf = subObj.AddComponent<MeshFilter>();
@@ -636,9 +616,9 @@ namespace ANIMVR
                 combinedMesh.name = pathForName + meshId;
 
                 mf.sharedMesh = combinedMesh;
-                mr.sharedMaterial = materialToUse;
+                mr.sharedMaterial = baseMaterial;
 
-                ctx.ctx.AddObjectToAsset(pathForName + "_mesh" + index, mf.sharedMesh);
+                ctx.ctx.AddObjectToAsset(pathForName + "_mesh" + meshId, mf.sharedMesh);
                 meshId++;
             }
 
@@ -646,8 +626,7 @@ namespace ANIMVR
             return playableObj;
         }
 
-        public AnimationClip MakeAnimationClip(List<SerializableTransform> frames, List<float> times, string path)
-        {
+        public AnimationClip MakeAnimationClip(List<SerializableTransform> frames, List<float> times, string path) {
             var xCurve = new AnimationCurve();
             var yCurve = new AnimationCurve();
             var zCurve = new AnimationCurve();
@@ -661,8 +640,7 @@ namespace ANIMVR
             var scaleYCurve = new AnimationCurve();
             var scaleZCurve = new AnimationCurve();
 
-            for (int i = 0; i < frames.Count; i++)
-            {
+            for (int i = 0; i < frames.Count; i++) {
                 var frame = frames[i];
                 var time = times != null ? times[i] : (i / stage.fps);
 
@@ -742,8 +720,7 @@ namespace ANIMVR
             return animationClip;
         }
 
-        public AnimationClip MakeAnimationClip(TransformTimelineData timeline, string path)
-        {
+        public AnimationClip MakeAnimationClip(TransformTimelineData timeline, string path) {
             return MakeAnimationClip(timeline.Frames, timeline.FrameTimes, path);
         }
 

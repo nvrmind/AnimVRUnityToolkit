@@ -5,10 +5,15 @@ uniform int _FrameIndex;
 UNITY_DECLARE_TEX2DARRAY(_CoverageBlueNoise);
 
 #include "UnityCG.cginc"
+#include "Deformation.cginc"
+#pragma multi_compile_fwdbase nolightmap nodirlightmap nodynlightmap novertexlight
+// shadow helper functions and macros
+#include "AutoLight.cginc"
 
 #define COVERAGE_DATA \
 	float4 pos : SV_POSITION; \
 	float4 screenPos : TEXCOORD7; \
+	SHADOW_COORDS(8) \
 
 struct CoverageFragmentInfo {
 	int id;
@@ -18,6 +23,7 @@ struct CoverageFragmentInfo {
 #define TRANSFER_COVERAGE_DATA_VERT(v, o) \
 	o.pos = UnityObjectToClipPos(v.vertex); \
 	o.screenPos = ComputeScreenPos(o.pos); \
+	TRANSFER_SHADOW(o) \
 
 #if UNITY_SINGLE_PASS_STEREO
 
@@ -67,7 +73,57 @@ float4 ApplyCoverage(float4 c, CoverageFragmentInfo i) { //, inout uint coverage
 	float ditherOffset = (RandNorm - 0.5);
 	float AlphaWithDither = saturate(c.a + 0.99 * ditherOffset * DitherRange);
 
-
-
 	return float4( c.rgb, AlphaWithDither);
+}
+
+void ApplyFade(float fade, uint fadeMode, float alongLine, int dataIndex, out float fadeOpacity, out float fadeWidth) {
+	const int FadeOpacity = 1;
+	const int FadeOpacityAlongLine = 2;
+	const int FadeWidth = 4;
+	const int FadeWidthAlongLine = 8;
+	const int RandomOffset = 16;
+	const int EndToStart = 32;
+
+	fadeWidth = 1;
+	fadeOpacity = 1;
+
+	float alongFactor = 1;
+
+	if (fadeMode & RandomOffset) {
+		float r = rand(float2(dataIndex, 0)) * 0.4;
+		fade = saturate(fade * (1.0 + r) - r);
+	}
+
+	if (fadeMode & EndToStart) {
+		alongLine = 1.0 - alongLine;
+	}
+
+	float frameFade = fade * 1.2 - 0.2;
+	alongFactor = saturate(smoothstep(frameFade + 0.2, frameFade, alongLine));
+
+
+	if (fadeMode & FadeOpacity) {
+		fadeOpacity = lerp(fade, alongFactor, fadeMode & FadeOpacityAlongLine);
+	}
+
+	if (fadeMode & FadeWidth) {
+		fadeWidth = lerp(fade, alongFactor, fadeMode & FadeWidthAlongLine);
+	}
+
+	fadeWidth = saturate(fadeWidth);
+	fadeOpacity = saturate(fadeOpacity);
+}
+
+void ComputeFadeValues(float alongLine, float fadeIn, uint fadeModeIn, float fadeOut, uint fadeModeOut, int dataIndex, out float fadeOpacity, out float fadeWidth) {
+	float fadeInOpacity = 1;
+	float fadeInWidth = 1;
+
+	float fadeOutOpacity = 1;
+	float fadeOutWidth = 1;
+
+	ApplyFade(fadeIn,  fadeModeIn,  alongLine,        dataIndex, fadeInOpacity,  fadeInWidth);
+	ApplyFade(fadeOut, fadeModeOut, 1.0f - alongLine, dataIndex, fadeOutOpacity, fadeOutWidth);
+
+	fadeOpacity = fadeInOpacity * fadeOutOpacity;
+	fadeWidth = fadeInWidth * fadeOutWidth;
 }
