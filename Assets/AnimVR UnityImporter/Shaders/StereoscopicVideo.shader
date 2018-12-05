@@ -88,6 +88,7 @@ Shader "AnimVR/Video"
 			tc = (tc + i.layout3DScaleAndOffset.xy) * i.layout3DScaleAndOffset.zw;
 
 			float4 texColor = tex2D(_MainTex, tc);
+			texColor.a = 1;
 
 #if !UNITY_SINGLE_PASS_STEREO
 			tc = i.uv;

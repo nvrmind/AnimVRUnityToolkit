@@ -1670,7 +1670,8 @@ public class LineData : IAnimData, IDeepCopy<LineData>
 #pragma warning restore CS0661 // Type defines operator == or operator != but does not override Object.GetHashCode()
 #pragma warning restore CS0659 // Type overrides Object.Equals(object o) but does not override Object.GetHashCode()
 {
-    public int Version = 1;
+    public const int CURRENT_VERSION = 2;
+    public int Version = CURRENT_VERSION;
 
     [OptionalField]
     [NonSerialized]
@@ -1739,7 +1740,7 @@ public class LineData : IAnimData, IDeepCopy<LineData>
         isWeb = false;
         isObjectSpaceTex = false;
         textureIndex = -1;
-        Version = 0;
+        Version = CURRENT_VERSION;
     }
 
     [OnDeserialized]
@@ -1788,6 +1789,7 @@ public class LineData : IAnimData, IDeepCopy<LineData>
         result.textureIndex = textureIndex;
         result.transform = transform.DeepCopy();
         result.widths = widths.DeepCopy();
+        result.Version = CURRENT_VERSION;
         return result;
     }
 
@@ -1816,7 +1818,7 @@ public class LineData : IAnimData, IDeepCopy<LineData>
 public static class BinaryExtensions {
 
     public static void Write(this BinaryWriter writer, LineData v) {
-        writer.Write(v.Version);
+        writer.Write(LineData.CURRENT_VERSION);
         writer.Write((int)v.brushMode);
         writer.Write((int)v.brushType);
         writer.Write(v.isFlat);
@@ -1835,11 +1837,16 @@ public static class BinaryExtensions {
         for (int i = 0; i < v.Points.Count; i++) writer.Write(v.rotations[i]);
         for (int i = 0; i < v.Points.Count; i++) writer.Write(v.light[i]);
         for (int i = 0; i < v.Points.Count; i++) writer.Write(v.cameraOrientations[i]);
+
+        writer.Write(v.constantWidth);
+        writer.Write(v.isWeb);
+        writer.Write(v.multiLine);
     }
 
 
     public static void Read(this BinaryReader w, ref LineData v) {
-        v.Version = w.ReadInt32();
+        int loadedVersion = w.ReadInt32();
+        v.Version = LineData.CURRENT_VERSION;
         v.brushMode = (BrushMode)w.ReadInt32();
         v.brushType = (BrushType)w.ReadInt32();
         v.isFlat = w.ReadBoolean();
@@ -1889,6 +1896,12 @@ public static class BinaryExtensions {
             var p = new SerializableQuaternion();
             w.Read(ref p);
             v.cameraOrientations.Add(p);
+        }
+
+        if(loadedVersion >= 2) {
+            v.constantWidth = w.ReadBoolean();
+            v.isWeb = w.ReadBoolean();
+            v.multiLine = w.ReadBoolean();
         }
     }
 
@@ -2306,7 +2319,7 @@ public class TimeLineData : PlayableData
             TrimLoopIn = TrimLoopOut = TrimLoopType.Infinity;
             FrameFadeInOutLinked = true;
             foreach (var f in Frames) {
-                f.FadeModeIn = f.FadeModeOut = FrameFadeMode.FadeOpacity;
+                f.FadeModeIn = f.FadeModeIn = FrameFadeMode.FadeOpacity;
             }
             SaveDataVersion = 3;
         }
@@ -2475,8 +2488,16 @@ public class StaticMeshData : PlayableData {
         return Timeline.Frames.FindIndex((t) => ReferenceEquals(t, instance));
     }
 
+    [OnDeserializing]
+    private void FormatDataDeserializing(StreamingContext sc) {
+        if (Timeline != null) Timeline.Frames.Clear();
+        if (InstanceMap != null) InstanceMap.Clear();
+        if (TransformProxies != null) TransformProxies.Clear();
+        if (SerializedInstanceMappings != null) SerializedInstanceMappings.Clear();
+    }
+
     [OnDeserialized]
-    private void FormatDataDeserialize(StreamingContext sc) {
+    private void FormatDataDeserialized(StreamingContext sc) {
         if (SerializedInstanceMappings == null) SerializedInstanceMappings = new List<int>();
         if (TransformProxies == null) TransformProxies = new List<AnimMeshTransform.MeshFrameTransformDataProxy>();
         if (Timeline == null) Timeline = new TransformTimelineData();
@@ -2503,7 +2524,7 @@ public class StaticMeshData : PlayableData {
     }
 
     [OnSerializing]
-    private void FormatDataSerialize(StreamingContext sc) {
+    private void FormatDataSerializing(StreamingContext sc) {
         SerializedInstanceMappings.Clear();
         SerializedInstanceMappings.Capacity = InstanceMap.Count;
 
@@ -4504,7 +4525,7 @@ public class AnimData : Singleton<AnimData> {
                 }
             }
         } catch (Exception _) {
-            Debug.LogError(_);
+            Debug.LogException(_);
         }
 
         stage.filename = "Memory";
@@ -4521,7 +4542,10 @@ public class AnimData : Singleton<AnimData> {
             Debug.LogError(_);
         }
 
-        stage.filename = "Memory";
+        if (stage != null) {
+            stage.filename = "Memory";
+        }
+
         return stage;
     }
 
@@ -4538,7 +4562,10 @@ public class AnimData : Singleton<AnimData> {
         } finally {
             Profiler.EndSample();
         }
-        stage.filename = filepath;
+
+        if (stage != null) {
+            stage.filename = filepath;
+        }
 
         return stage;
     }
@@ -4575,18 +4602,6 @@ public class AnimData : Singleton<AnimData> {
             using (BinaryWriter binWriter = new BinaryWriter(binStream)) {
                 Profiler.BeginSample("Serialize");
 
-#if false
-                    var bf = new BinaryFormatter() {
-                        Context = new StreamingContext(StreamingContextStates.Other, binWriter)
-                    };
-
-                    bf.Serialize(stageStream, stage);
-                    stageStream.Seek(0, SeekOrigin.Begin);
-                    var entry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("stage");
-                    s.PutNextEntry(entry);
-                    s.Write(stageStream.ToArray(), 0, (int)stageStream.Length);
-                    s.CloseEntry();
-#else
                 var serializer = new JsonSerializer() {
                     Context = new StreamingContext(StreamingContextStates.Other, binWriter),
                     Formatting = Formatting.Indented,
@@ -4596,6 +4611,8 @@ public class AnimData : Singleton<AnimData> {
                 using (var jsonTextWriter = new JsonTextWriter(sr)) {
                     serializer.Serialize(jsonTextWriter, stage);
                     jsonTextWriter.Flush();
+                    sr.Flush();
+
                     stageStream.Seek(0, SeekOrigin.Begin);
                     var entry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("stage");
                     s.PutNextEntry(entry);
@@ -4608,7 +4625,10 @@ public class AnimData : Singleton<AnimData> {
                 var versionBytes = Encoding.ASCII.GetBytes("1");
                 s.Write(versionBytes, 0, versionBytes.Length);
                 s.CloseEntry();
-#endif
+
+                binWriter.Flush();
+                binStream.Flush();
+
                 var binEntry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("bin");
                 s.PutNextEntry(binEntry);
                 s.Write(binStream.ToArray(), 0, (int)binStream.Length);
@@ -4637,7 +4657,10 @@ public class AnimData : Singleton<AnimData> {
             }
             
         } catch (Exception e) {
-            Debug.Log("Error saving stage file: " + filepath + "\n" + e.Message);
+            Debug.LogError("Error saving stage file: " + filepath + "\n" + e.Message);
+            if(e.InnerException != null) {
+                Debug.LogException(e.InnerException);
+            }
             if(bakFile != null) {
                 File.Copy(bakFile, filepath, true);
             }
