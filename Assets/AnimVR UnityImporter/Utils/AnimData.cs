@@ -2182,6 +2182,7 @@ public class FrameData : IAnimData, IDeepCopy<FrameData>
         RuntimeLines = new List<LineData>();
     }
 
+#pragma warning disable CS0618 // Type or member is obsolete
     [OnDeserialized]
     private void LoadBinary(StreamingContext sc) {
         Profiler.BeginSample("Deserialize Frame Lines");
@@ -2208,6 +2209,7 @@ public class FrameData : IAnimData, IDeepCopy<FrameData>
         }
         Profiler.EndSample();
     }
+#pragma warning restore CS0618 // Type or member is obsolete
 
     [OnSerializing]
     private void OnSerializing(StreamingContext sc) {
@@ -2319,7 +2321,7 @@ public class TimeLineData : PlayableData
             TrimLoopIn = TrimLoopOut = TrimLoopType.Infinity;
             FrameFadeInOutLinked = true;
             foreach (var f in Frames) {
-                f.FadeModeIn = f.FadeModeIn = FrameFadeMode.FadeOpacity;
+                f.FadeModeIn = f.FadeModeOut = FrameFadeMode.FadeOpacity;
             }
             SaveDataVersion = 3;
         }

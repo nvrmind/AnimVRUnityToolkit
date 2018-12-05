@@ -7,7 +7,6 @@ namespace AnimVR.Timeline
     /// </summary>
     [TrackColor(0.2313f, 0.6353f, 0.5843f)]
     [TrackClipType(typeof(AnimControlPlayableAsset))]
-    [TrackMediaType(TimelineAsset.MediaType.Script)]
     public class AnimControlTrack : TrackAsset
     {
     }

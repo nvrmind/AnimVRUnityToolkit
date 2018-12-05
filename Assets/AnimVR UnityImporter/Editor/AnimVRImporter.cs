@@ -125,7 +125,7 @@ namespace ANIMVR {
 
             GenerateUnityObject(stage, ctx);
 
-            var externalObjects = GetExternalObjectMap();
+            //var externalObjects = GetExternalObjectMap();
 
             ctx.AddObjectToAsset(Path.GetFileNameWithoutExtension(ctx.assetPath) + "_BaseMaterial", baseMaterial);
 
