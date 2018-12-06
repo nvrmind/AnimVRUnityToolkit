@@ -240,19 +240,19 @@ public static class MeshUtils {
             int strip1 = positions.Count + 1;
             int strip2 = positions.Count + 2;
 
-            var pos = tristream[0].objPos;
-            data.transform.ApplyTo(ref pos);
+            var posMat = data.transform.Mat;
+
+            var pos = posMat.MultiplyPoint3x4(tristream[0].objPos);
             positions.Add(pos);
             colors.Add(tristream[0].color);
             uvs.Add(tristream[0].uv);
-            if (normals != null) normals.Add(tristream[0].objNorm);
+            if (normals != null) normals.Add(posMat.MultiplyVector(tristream[0].objNorm));
 
-            pos = tristream[1].objPos;
-            data.transform.ApplyTo(ref pos);
+            pos = posMat.MultiplyPoint3x4(tristream[1].objPos);
             positions.Add(pos);
             colors.Add(tristream[1].color);
             uvs.Add(tristream[1].uv);
-            if (normals != null) normals.Add(tristream[1].objNorm);
+            if (normals != null) normals.Add(posMat.MultiplyVector(tristream[1].objNorm));
 
             bool flip = _BrushType != 0;
 
@@ -274,13 +274,12 @@ public static class MeshUtils {
                 strip2++;
 
 
-                pos = tristream[i].objPos;
-                data.transform.ApplyTo(ref pos);
+                pos = posMat.MultiplyPoint3x4(tristream[i].objPos);
 
                 positions.Add(pos);
                 colors.Add(tristream[i].color);
                 uvs.Add(tristream[i].uv);
-                if (normals != null) normals.Add(tristream[i].objNorm);
+                if (normals != null) normals.Add(posMat.MultiplyVector(tristream[i].objNorm));
             }
         }
     }

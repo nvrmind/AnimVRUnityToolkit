@@ -44,8 +44,6 @@
 			#include "AutoLight.cginc"
 			#include "CoverageTransparency.cginc"
 
-			StructuredBuffer<int> ConstraintFlags;
-			
 			float _Gamma;
 			float _OnlyTint;
 
@@ -73,7 +71,6 @@
                 o.norm = UnityObjectToWorldNormal(v.normal);
                 o.diff =  v.color;
 
-
 				float alongLine = v.texcoord.x;
 				float fadeOpacity, fadeWidth;
 				ComputeFadeValues(alongLine, _FadeIn, _FadeModeIn, _FadeOut, _FadeModeOut, 0, fadeOpacity, fadeWidth);
@@ -81,7 +78,8 @@
 				v.vertex.xyz = v.vertex.xyz - v.normal.xyz * (1.0 - fadeWidth);
 				o.diff.a *= fadeOpacity;
 
-				if (ConstraintFlags[id] != 0) o.diff = float4(1, 0, 0, 1);
+				if (fadeWidth < 0.00001) o.diff.a = 0;
+
 				TRANSFER_COVERAGE_DATA_VERT(v, o);
 
                 o.ambient = ShadeSH9(half4(o.norm,1));
