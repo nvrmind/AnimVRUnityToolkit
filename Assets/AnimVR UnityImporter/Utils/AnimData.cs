@@ -2577,9 +2577,40 @@ public class CameraData : PlayableData {
     [JsonIgnore]
     public AnimCam attachedCam { get { return base.attachedPlayable as AnimCam; } }
 
+    #region Old Camera Settings
+
     public string FilmFormat = "35mm 16:9 Aperture (1.78:1)";
     public int LensIndex = 0;
     public int FStopIndex = 0;
+
+    #endregion
+
+    static float FocalLengthToFOV(float focalLength, float sensorSize) {
+        return Mathf.Rad2Deg * 2 * Mathf.Atan(sensorSize/(2*focalLength));
+    }
+
+    static float FOVToFocalLength(float fov, float sensorSize) {
+        return sensorSize / (2*Mathf.Tan(0.5f * fov * Mathf.Deg2Rad));
+    }
+
+    [JsonIgnore]
+    public float FieldOfView {
+        get { 
+            return FocalLengthToFOV(FocalLength, AperatureSize.y); 
+        }
+        set { 
+            FocalLength = FOVToFocalLength(value, AperatureSize.y); 
+        }
+    }
+
+    [JsonIgnore] public float AspectRatio { get { return AperatureSize.x / AperatureSize.y; } }
+
+    [OptionalField] public float FStop = 2.4f;
+    [OptionalField] public float FocalLength = 16;
+    [OptionalField] public Vector2 AperatureSize = new Vector2(36, 20.25f);
+    [OptionalField] public Vector2 AperatureShift = new Vector2(0, 0);
+
+
     public float FocusDistance = 0.5f;
     public float RecordingTime = 0;
     [OptionalField] public TransformTimelineData Timeline = new TransformTimelineData();
@@ -2593,6 +2624,9 @@ public class CameraData : PlayableData {
     [OptionalField] public bool Stereo = false;
     [OptionalField] public float StereoSeparation = 0.03f;
     [OptionalField] public EffectsData EffectsData = new EffectsData();
+    [OptionalField] public string OverlayVideoPath = "";
+    [OptionalField] public float OverlayTransparency = 1.0f;
+    [OptionalField] public bool OverlayUnder = false;
 
     [OnDeserialized]
     private void FormatDataDeserialize(StreamingContext sc) {
@@ -2613,8 +2647,15 @@ public class CameraData : PlayableData {
 
         result.FilmFormat = FilmFormat;
         result.LensIndex = LensIndex;
-        result.FocusDistance = FocusDistance;
         result.FStopIndex = FStopIndex;
+
+        result.FocalLength = FocalLength;
+        result.FStop = FStop;
+        result.AperatureSize = AperatureSize;
+        result.AperatureShift = AperatureShift;
+        result.FocusDistance = FocusDistance;
+
+
         result.Timeline = Timeline.DeepCopy();
         result.CurrentShotOffset = CurrentShotOffset.DeepCopy();
         result.EnableDOF = EnableDOF;
@@ -2623,6 +2664,8 @@ public class CameraData : PlayableData {
         result.Stereo = Stereo;
         result.StereoSeparation = StereoSeparation;
         result.EffectsData = EffectsData;
+        result.OverlayVideoPath = OverlayVideoPath;
+        result.OverlayTransparency = OverlayTransparency;
 
         return result;
     }
@@ -4530,7 +4573,7 @@ public class AnimData : Singleton<AnimData> {
             Debug.LogException(_);
         }
 
-        stage.filename = "Memory";
+        if(stage != null) stage.filename = "Memory";
         return stage;
     }
 

@@ -513,22 +513,22 @@ public static class MeshUtils {
         var mesh = new Mesh();
         mesh.vertices = data.vertices.Select((v) => v.V3).ToArray();
 
-        if (data.normals != null) {
+        if (data.normals != null && data.normals.Length == data.vertices.Length) {
             mesh.normals = data.normals.Select((v) => v.V3).ToArray();
         }
 
-        if (data.uvs != null && data.uvs.Length == mesh.vertices.Length) {
+        if (data.uvs != null && data.uvs.Length == data.vertices.Length) {
             mesh.uv = data.uvs.Select((v) => v.V2).ToArray();
         }
 
-        if (data.colors != null && data.colors.Length == mesh.vertices.Length) {
+        if (data.colors != null && data.colors.Length == data.vertices.Length) {
             mesh.colors = data.colors.Select((v) => v.C).ToArray();
         }
 
         mesh.triangles = data.triangles;
         mesh.RecalculateBounds();
 
-        if (data.normals == null) {
+        if (data.normals == null || data.normals.Length != data.vertices.Length) {
             mesh.RecalculateNormals();
         }
 
